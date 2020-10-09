@@ -1,7 +1,7 @@
 import weakref
 import numpy as np
-from dlfs.core import Parameter, Layer
-import dlfs.functions as F
+from deeplfs.core import Parameter, Layer
+import deeplfs.functions as F
 
 class Linear(Layer):
     def __init__(self, out_size, in_size=None, nobias=False, dtype=np.float32):

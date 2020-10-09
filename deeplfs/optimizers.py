@@ -1,5 +1,5 @@
 import numpy as np
-from dlfs.core import Optimizer
+from deeplfs.core import Optimizer
 
 class SGD(Optimizer):
     def __init__(self, lr=0.01):

@@ -1,6 +1,6 @@
 **/*.DS_Store*
 __pycache__/
-.ipynb_checkpoints/
-ghostdriver.log
-input/
-tmp/
+build/
+dist/
+deeplfs.egg-info/
+temp/

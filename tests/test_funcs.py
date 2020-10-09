@@ -4,8 +4,8 @@ import numpy as np
 import sys
 sys.path.append(sys.path[0][:-5])
 
-from dlfs.core_simple import Variable
-from dlfs.functions import square, exp, numerical_diff
+from deeplfs.core_simple import Variable
+from deeplfs.functions import square, exp, numerical_diff
 
 class SquareTest(unittest.TestCase):
 

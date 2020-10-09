@@ -1,5 +1,5 @@
 import numpy as np
-from dlfs.core import Variable, Function, as_variable
+from deeplfs.core import Variable, Function, as_variable
 
 def numerical_diff(f, x, eps=1e-4):
     x0 = Variable(x.data - eps)
