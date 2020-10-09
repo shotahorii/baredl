@@ -16,8 +16,8 @@ with open(path.join(here, 'requirements.txt'), encoding='utf-8') as f:
 reqs = [x.strip() for x in reqs if x.strip() != '']
 
 setup(
-    name='deeplfs',
-    packages=['deeplfs'], 
+    name='baredl',
+    packages=['baredl'], 
     version=__version__,
     license='MIT', 
     install_requires=reqs,

@@ -2,7 +2,7 @@ import contextlib
 import weakref
 import numpy as np
 
-import deeplfs
+import baredl
 
 ##############################
 # Configuration
@@ -119,13 +119,13 @@ class Variable:
 
     @property
     def T(self):
-        return deeplfs.functions.transpose(self)
+        return baredl.functions.transpose(self)
 
     def transpose(self):
-        return deeplfs.functions.transpose(self)
+        return baredl.functions.transpose(self)
 
     def sum(self, axis=None, keepdims=False):
-        return deeplfs.functions.sum(self, axis, keepdims)
+        return baredl.functions.sum(self, axis, keepdims)
 
     def set_creator(self, func):
         self.creator = func
@@ -174,7 +174,7 @@ class Variable:
     def reshape(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
             shape = shape[0]
-        return deeplfs.functions.reshape(self, shape)
+        return baredl.functions.reshape(self, shape)
 
 class Parameter(Variable):
     pass
@@ -221,8 +221,8 @@ class Add(Function):
         # for broadcast
         x0, x1 = self.inputs
         if x0.shape != x1.shape:
-            gx0 = deeplfs.functions.sum_to(gx0, x0.shape)
-            gx1 = deeplfs.functions.sum_to(gx1, x1.shape)
+            gx0 = baredl.functions.sum_to(gx0, x0.shape)
+            gx1 = baredl.functions.sum_to(gx1, x1.shape)
         return gx0, gx1
 
 class Mul(Function):
@@ -236,8 +236,8 @@ class Mul(Function):
         gx0 = gy * x1
         gx1 = gy * x0
         if x0.shape != x1.shape:
-            gx0 = deeplfs.functions.sum_to(gx0, x0.shape)
-            gx1 = deeplfs.functions.sum_to(gx1, x1.shape)
+            gx0 = baredl.functions.sum_to(gx0, x0.shape)
+            gx1 = baredl.functions.sum_to(gx1, x1.shape)
         return gx0, gx1
 
 class Neg(Function):
@@ -257,8 +257,8 @@ class Sub(Function):
         # for broadcast
         x0, x1 = self.inputs
         if x0.shape != x1.shape:
-            gx0 = deeplfs.functions.sum_to(gx0, x0.shape)
-            gx1 = deeplfs.functions.sum_to(gx1, x1.shape)
+            gx0 = baredl.functions.sum_to(gx0, x0.shape)
+            gx1 = baredl.functions.sum_to(gx1, x1.shape)
         return gx0, gx1
 
 class Div(Function):
@@ -271,8 +271,8 @@ class Div(Function):
         gx0 = gy / x0
         gx1 = gy * (- x0 / (x1 ** 2))
         if x0.shape != x1.shape:
-            gx0 = deeplfs.functions.sum_to(gx0, x0.shape)
-            gx1 = deeplfs.functions.sum_to(gx1, x1.shape)
+            gx0 = baredl.functions.sum_to(gx0, x0.shape)
+            gx1 = baredl.functions.sum_to(gx1, x1.shape)
         return gx0, gx1
 
 class Pow(Function):

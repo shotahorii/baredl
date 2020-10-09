@@ -1,7 +1,7 @@
 import numpy as np
-from deeplfs.core import Model
-import deeplfs.functions as F
-import deeplfs.layers as L
+from baredl.core import Model
+import baredl.functions as F
+import baredl.layers as L
 
 class MLP(Model):
     def __init__(self, fc_output_sizes, activation=F.sigmoid):

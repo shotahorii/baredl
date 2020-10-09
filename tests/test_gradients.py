@@ -4,8 +4,8 @@ import numpy as np
 import sys
 sys.path.append(sys.path[0][:-5])
 
-from deeplfs import Variable
-from deeplfs.functions import numerical_diff
+from baredl import Variable
+from baredl.functions import numerical_diff
 
 ##############################
 # Benchmark functions

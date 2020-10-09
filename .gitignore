@@ -2,5 +2,5 @@
 __pycache__/
 build/
 dist/
-deeplfs.egg-info/
+baredl.egg-info/
 temp/
