@@ -1,5 +1,31 @@
 import numpy as np
-from baredl.core import Optimizer
+
+class Optimizer:
+    def __init__(self):
+        self.target = None
+        self.hooks = []
+
+    def setup(self, target):
+        self.target = target
+        return self
+
+    def update(self):
+        # list parameters containing not None grad
+        params = [p for p in self.target.params() if p.grad is not None]
+
+        # preprocess (optional)
+        for f in self.hooks:
+            f(params)
+
+        for p in params:
+            self.update_one(p)
+
+    def update_one(param):
+        raise NotImplementedError()
+
+    def add_hook(self, f):
+        self.hooks.append(f)
+
 
 class SGD(Optimizer):
     def __init__(self, lr=0.01):
