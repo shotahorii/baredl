@@ -1,6 +1,8 @@
-import numpy as np
+from abc import ABCMeta, abstractmethod
+from bareml.core import get_array_module
 
-class Optimizer:
+
+class Optimiser(metaclass=ABCMeta):
     def __init__(self):
         self.target = None
         self.hooks = []
@@ -20,14 +22,15 @@ class Optimizer:
         for p in params:
             self.update_one(p)
 
+    @abstractmethod
     def update_one(param):
-        raise NotImplementedError()
+        pass
 
     def add_hook(self, f):
         self.hooks.append(f)
 
 
-class SGD(Optimizer):
+class SGD(Optimiser):
     def __init__(self, lr=0.01):
         super().__init__()
         self.lr = lr
@@ -36,7 +39,7 @@ class SGD(Optimizer):
         param.data -= self.lr * param.grad.data
 
 
-class MomentumSGD(Optimizer):
+class MomentumSGD(Optimiser):
     def __init__(self, lr=0.01, momentum=0.9):
         super().__init__()
         self.lr = lr
@@ -46,7 +49,8 @@ class MomentumSGD(Optimizer):
     def update_one(self, param):
         v_key = id(param)
         if v_key not in self.vs:
-            self.vs[v_key] = np.zeros_like(param.data)
+            xp = get_array_module(param.data)
+            self.vs[v_key] = xp.zeros_like(param.data)
 
         v = self.vs[v_key]
         v *= self.momentum

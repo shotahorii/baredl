@@ -1,34 +1,22 @@
-import contextlib
 import weakref
 import numpy as np
+from baredl.config import Config, using_config
 
-import baredl
-
-##############################
-# Configuration
-##############################
-
-class Config:
-    enable_backprop = True
-
-@contextlib.contextmanager
-def using_config(name, value):
-    old_value = getattr(Config, name)
-    setattr(Config, name, value)
-    try:
-        yield
-    finally:
-        setattr(Config, name, old_value)
-
-def no_grad():
-    return using_config('enable_backprop', False)
+try:
+    import cupy as cp
+    cupy = cp
+    array_types = (np.ndarray, cp.ndarray)
+except ImportError:
+    cupy = None
+    array_types = (np.ndarray)
 
 
-##############################
+# -------------------------------------------------------------
 # Utils
-##############################
+# -------------------------------------------------------------
 
-def as_array(x):
+
+def as_array(x, array_module=np):
     """
     Convert scalar x to np.array datatype.
     e.g. 3 -> np.array(3)
@@ -36,10 +24,12 @@ def as_array(x):
     Parameters
     ----------
     x: np.ndarray (any shape), np.scalar or scalar
+    array_module: {numpy, cupy}
     """
     if np.isscalar(x):
-        return np.array(x)
+        return array_module.array(x)
     return x
+
 
 def as_variable(obj):
     """
@@ -54,9 +44,44 @@ def as_variable(obj):
         return obj
     return Variable(obj)
 
-##############################
+
+def as_numpy(x):
+    if isinstance(x, Variable):
+        x = x.data
+
+    if np.isscalar(x):
+        return np.array(x)
+    elif isinstance(x, np.ndarray):
+        return x
+
+    if cupy is None:
+        raise Exception('CuPy not loaded.')
+    return cp.asnumpy(x)
+
+
+def as_cupy(x):
+    if isinstance(x, Variable):
+        x = x.data
+
+    if cupy is None:
+        raise Exception('CuPy not loaded.')
+    return cp.asarray(x)
+
+
+def get_array_module(x):
+    if isinstance(x, Variable):
+        x = x.data
+
+    if cupy is None:
+        return np
+    xp = cp.get_array_module(x)
+    return xp
+
+
+# -------------------------------------------------------------
 # Variable / Parameter 
-##############################
+# -------------------------------------------------------------
+
 
 class Variable:
     """
@@ -75,7 +100,7 @@ class Variable:
     
     def __init__(self, data, name=None):
         if data is not None:
-            if not isinstance(data, np.ndarray):
+            if not isinstance(data, array_types):
                 raise TypeError('{} is not supported'.format(type(data)))
 
         self.data = data
@@ -106,7 +131,6 @@ class Variable:
         return get_item(self, slices)
 
     def __add__(self, other):
-        """ define Variable +  """
         return add(self, other)
 
     def __radd__(self, other):
@@ -136,6 +160,9 @@ class Variable:
     def __pow__(self, other):
         return pow(self, other)
 
+    def __matmul__(self, other):
+        return matmul(self, other)
+
     @property
     def shape(self):
         return self.data.shape
@@ -154,13 +181,27 @@ class Variable:
 
     @property
     def T(self):
-        return baredl.functions.transpose(self)
+        return transpose(self)
+
+    def flatten(self):
+        return flatten(self)
 
     def transpose(self):
-        return baredl.functions.transpose(self)
+        return transpose(self)
 
     def sum(self, axis=None, keepdims=False):
-        return baredl.functions.sum(self, axis, keepdims)
+        return sum(self, axis, keepdims)
+
+    def max(self, axis=None, keepdims=False):
+        return max(self, axis, keepdims)
+
+    def min(self, axis=None, keepdims=False):
+        return min(self, axis, keepdims)
+
+    def reshape(self, *shape):
+        if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
+            shape = shape[0]
+        return reshape(self, shape)
 
     def set_creator(self, func):
         self.creator = func
@@ -197,7 +238,8 @@ class Variable:
         # then backprop is dL/dx = dL/dL * dL/dz * dz/dx 
         # where the starting point dL/dL is always 1. 
         if self.grad is None:
-            self.grad = Variable(np.ones_like(self.data)) # grad is also a Variable!! This allows us double backprop.
+            xp = get_array_module(self.data)
+            self.grad = Variable(xp.ones_like(self.data)) # grad is also a Variable!! This allows us double backprop.
 
         # funcs is a list to store Function instances of which 
         # backward need to be called.
@@ -254,19 +296,23 @@ class Variable:
                 for y in f.outputs:
                     y().grad = None
 
-    def reshape(self, *shape):
-        if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
-            shape = shape[0]
-        return baredl.functions.reshape(self, shape)
+    def to_cpu(self):
+        if self.data is not None:
+            self.data = as_numpy(self.data)
+
+    def to_gpu(self):
+        if self.data is not None:
+            self.data = as_cupy(self.data)
+    
 
 
 class Parameter(Variable):
     pass
 
 
-##############################
-# Base Functions
-##############################
+# -------------------------------------------------------------
+# Base class of functions
+# -------------------------------------------------------------
 
 
 class Function:
@@ -318,7 +364,7 @@ class Function:
             # this is because we want to make sure to run backward of Function instances in
             # deeper places before running backward of Function instances in less deep place 
             # in the calc graph.
-            self.generation = max([input.generation for input in inputs])
+            self.generation = np.max([input.generation for input in inputs])
 
             # set all outputs' creator as this Function instance.
             # so that those outputs can refer to this when backprop. 
@@ -345,24 +391,64 @@ class Function:
         """ gy should be one or more of Variable (output Variable's grad) """
         raise NotImplementedError()
 
-##############################
-# Basic arithmetic operations
-##############################
+
+# -------------------------------------------------------------
+# Basic arithmetic operations: add / mul / neg / sub / rsub / div / rdiv / pow
+# -------------------------------------------------------------
+
 
 class Add(Function):
+    """ Class implementation for add function below. """
+
     def forward(self, x0, x1):
-        """ x0, x1: np.ndarray (any shape) """
-        y = x0 + x1 # if x0 and x1 have different shape, np automatically broadcast.
+        """ See doc of add function below. """
+
+        # if x0 and x1 have different shape, np automatically broadcast.
+        # e.g. np.array([1,2,3]) + np.array(1) = np.array([2,3,4])
+        y = x0 + x1 
         return y 
     
     def backward(self, gy):
+        """
+        Parameters
+        ----------
+        gy: baredl.Variable
+            A grad from former backprop calculation.
+            e.g. Assume L = 2y, y = x0 + x1
+                 Then, dL/dx = dL/dy * dy/dx
+                 The parameter gy is equivalent to dL/dy in this example. 
+                 As dy/dx0 and dy/dx1 are both 1, dL/dx0 == dL/dx1 == dL/dy
+            So, gx0, gx1 = gy, gy as written below.
+        """
         gx0, gx1 = gy, gy
-        # for broadcast
+
+        # if broadcast happened in forward i.e. x0.shape != x1.shape, 
+        # we need to reverse broadcast gx0 or gx1 back to the original shape.
         x0, x1 = self.inputs
         if x0.shape != x1.shape:
-            gx0 = baredl.functions.sum_to(gx0, x0.shape)
-            gx1 = baredl.functions.sum_to(gx1, x1.shape)
+            gx0 = reverse_broadcast_to(gx0, x0.shape)
+            gx1 = reverse_broadcast_to(gx1, x1.shape)
+
         return gx0, gx1
+
+
+def add(x0, x1):
+    """
+    Basic arithmetic '+' operation for bareml.Variable.
+    Used only to override Variable class's __add__ and __radd__.
+
+    Parameters
+    ----------
+    x0: xp.ndarray (any shape)
+    x1: xp.ndarray (any shape) or scalar
+        Note that since this function is only called 
+        via Variable class's __add__ and __radd__, 
+        x0 is always xp.ndarray (Variable.data) but 
+        x1 can be scalar. e.g. Variable(1) + 3
+    """
+    x1 = as_array(x1, get_array_module(x0.data))
+    return Add()(x0, x1)
+
 
 class Mul(Function):
     def forward(self, x0, x1):
@@ -375,9 +461,10 @@ class Mul(Function):
         gx0 = gy * x1
         gx1 = gy * x0
         if x0.shape != x1.shape:
-            gx0 = baredl.functions.sum_to(gx0, x0.shape)
-            gx1 = baredl.functions.sum_to(gx1, x1.shape)
+            gx0 = reverse_broadcast_to(gx0, x0.shape)
+            gx1 = reverse_broadcast_to(gx1, x1.shape)
         return gx0, gx1
+
 
 class Neg(Function):
     def forward(self, x):
@@ -385,6 +472,7 @@ class Neg(Function):
     
     def backward(self, gy):
         return -gy
+
 
 class Sub(Function):
     def forward(self, x0, x1):
@@ -396,9 +484,10 @@ class Sub(Function):
         # for broadcast
         x0, x1 = self.inputs
         if x0.shape != x1.shape:
-            gx0 = baredl.functions.sum_to(gx0, x0.shape)
-            gx1 = baredl.functions.sum_to(gx1, x1.shape)
+            gx0 = reverse_broadcast_to(gx0, x0.shape)
+            gx1 = reverse_broadcast_to(gx1, x1.shape)
         return gx0, gx1
+
 
 class Div(Function):
     def forward(self, x0, x1):
@@ -410,9 +499,10 @@ class Div(Function):
         gx0 = gy / x0
         gx1 = gy * (- x0 / (x1 ** 2))
         if x0.shape != x1.shape:
-            gx0 = baredl.functions.sum_to(gx0, x0.shape)
-            gx1 = baredl.functions.sum_to(gx1, x1.shape)
+            gx0 = reverse_broadcast_to(gx0, x0.shape)
+            gx1 = reverse_broadcast_to(gx1, x1.shape)
         return gx0, gx1
+
 
 class Pow(Function):
     def __init__(self, c):
@@ -427,16 +517,6 @@ class Pow(Function):
         gx = self.c * (x ** (self.c - 1)) * gy
         return gx
 
-def add(x0, x1):
-    """ 
-    x0, x1: np.ndarray (any shape) or scalar 
-    Since this function is only used to override Variable class's 
-    __add__ and __radd__, 
-    input x0 is always a Variable's data. Which means always np.ndarray.
-    In contrast, x1 can be a scalar. e.g. Variable(np.array(1)) + 3.0
-    """
-    x1 = as_array(x1)
-    return Add()(x0, x1)
 
 def mul(x0, x1):
     """ 
@@ -446,8 +526,9 @@ def mul(x0, x1):
     input x0 is always a Variable's data. Which means always np.ndarray.
     In contrast, x1 can be a scalar. e.g. Variable(np.array(1)) * 3.0
     """
-    x1 = as_array(x1)
+    x1 = as_array(x1, get_array_module(x0.data))
     return Mul()(x0, x1)
+
 
 def neg(x):
     """ 
@@ -458,6 +539,7 @@ def neg(x):
     """
     return Neg()(x)
 
+
 def sub(x0, x1):
     """ 
     x0, x1: np.ndarray (any shape) or scalar 
@@ -466,8 +548,9 @@ def sub(x0, x1):
     input x0 is always a Variable's data. Which means always np.ndarray.
     In contrast, x1 can be a scalar. e.g. Variable(np.array(1)) - 3.0
     """
-    x1 = as_array(x1)
+    x1 = as_array(x1, get_array_module(x0.data))
     return Sub()(x0, x1)
+
 
 def rsub(x0, x1):
     """ 
@@ -477,22 +560,25 @@ def rsub(x0, x1):
     input x0 is always a Variable's data. Which means always np.ndarray.
     In contrast, x1 can be a scalar. e.g. 3.0 - Variable(np.array(1))
     """
-    x1 = as_array(x1)
+    x1 = as_array(x1, get_array_module(x0.data))
     return Sub()(x1, x0)
+
 
 def div(x0, x1):
     """ 
     x0, x1: np.ndarray (any shape) or scalar 
     """
-    x1 = as_array(x1)
+    x1 = as_array(x1, get_array_module(x0.data))
     return Div()(x0, x1)
+
 
 def rdiv(x0, x1):
     """ 
     x0, x1: np.ndarray (any shape) or scalar 
     """
-    x1 = as_array(x1)
+    x1 = as_array(x1, get_array_module(x0.data))
     return Div()(x1, x0)
+
 
 def pow(x,c):
     """ 
@@ -501,9 +587,10 @@ def pow(x,c):
     return Pow(c)(x)
 
 
-##############################
-# get_item operation
-##############################
+# -------------------------------------------------------------
+# Tensor manipulation: get_item / reshape / transpose
+# -------------------------------------------------------------
+
 
 class GetItem(Function):
     def __init__(self, slices):
@@ -518,8 +605,6 @@ class GetItem(Function):
         f = GetItemGrad(self.slices, x.shape)
         return f(gy)
 
-def get_item(x, slices):
-    return GetItem(slices)(x)
 
 class GetItemGrad(Function):
     def __init__(self, slices, in_shape):
@@ -527,10 +612,358 @@ class GetItemGrad(Function):
         self.in_shape = in_shape
 
     def forward(self, gy):
-        gx = np.zeros_like(self.in_shape)
-        np.add.at(gx, self.slices, gy)
+        xp = get_array_module(gy)
+        gx = xp.zeros_like(self.in_shape)
+
+        if xp is np:
+            np.add.at(gx, self.slices, gy)
+        else:
+            xp.scatter_add(gx, self.slices, gy)
         return gx
 
     def backward(self, ggx):
         return get_item(ggx, self.slices)
 
+
+def get_item(x, slices):
+    return GetItem(slices)(x)
+
+
+class Reshape(Function):
+    def __init__(self, shape):
+        self.shape = shape
+
+    def forward(self, x):
+        self.x_shape = x.shape
+        y = x.reshape(self.shape)
+        return y
+
+    def backward(self, gy):
+        return reshape(gy, self.x_shape)
+
+
+def reshape(x, shape):
+    if x.shape == shape:
+        return as_variable(x)
+    return Reshape(shape)(x)
+
+
+def flatten(x):
+    return reshape(x, (x.shape[0], -1))
+
+
+def expand_dims(x, axis):
+    x = as_variable(x)
+    shape = list(x.shape)
+    shape.insert(axis, 1)
+    return reshape(x, tuple(shape))
+
+
+class Transpose(Function):
+    def __init__(self, axes=None):
+        self.axes = axes
+
+    def forward(self, x):
+        y = x.transpose(self.axes)
+        return y
+
+    def backward(self, gy):
+        if self.axes==None:
+            return tanspose(gy)
+
+        inv_axes = tuple(np.argsort(self.axes)) # should I use tuple(np.argsort([ax % len(self.axes) for ax in self.axes])) ??
+        return transpose(x, inv_axes)
+
+
+def transpose(x, axes=None):
+    return Transpose(axes)(x)
+
+
+# -------------------------------------------------------------
+# Tensor operations: 
+# -------------------------------------------------------------
+
+
+class Sum(Function):
+    def __init__(self, axis, keepdims):
+        self.axis = axis
+        self.keepdims = keepdims
+
+    def forward(self, x):
+        self.x_shape = x.shape
+        y = x.sum(axis=self.axis, keepdims=self.keepdims)
+        return y
+    
+    def backward(self, gy):
+        
+        # Here, we'd like to reshape gy back to original x shape
+        # by using broadcast_to.
+        # To do so, we firstly want to make sure input gy has  
+        # the shape which is broadcast-able to original x shape.
+        # What does this mean? For example, 
+        # x = Variable(np.array([[1,2,3],[4,5,6]]))
+        # y = sum(x, axis=1, keepdims=False)
+        # then, y is Variable([6, 15])
+        # hence, gy is Variable([1, 1])
+        # now, x.shape is (2,3)
+        # Variable([1, 1]) cannot be broadcasted to Variable([[1,1,1],[1,1,1]])
+        # i.e. gy needs to be Variable([[1], [1]]) instead of Variable([1, 1])        
+        gy = self._reshape_broadcastable(gy, self.x_shape, self.axis, self.keepdims)
+        gx = broadcast_to(gy, self.x_shape)
+        return gx
+
+    def _reshape_broadcastable(self, gy, x_shape, axis, keepdims):
+        """
+        Reshape gradient appropriately for bareml.sum's backward.
+        
+        Parameters
+        ----------
+        gy: Variable
+            Gradient variable from the output by backprop.
+        
+        x_shape: tuple
+            Shape used at sum function's forward.
+            
+        axis: None or int or tuple of int
+            Axis used at sum function's forward.
+        
+        keepdims: bool
+            Keepdims used at sum function's forward.
+        
+        Returns
+        -------
+        Variable
+            Gradient variable which is reshaped appropriately
+        """
+        ndim = len(x_shape)
+
+        # standardise axis
+        if axis is None:
+            tupled_axis = None
+        elif not isinstance(axis, tuple): # only one axis e.g. axis=0
+            tupled_axis = (axis,)
+        else: # multiple axes e.g. axis=(0,1)
+            tupled_axis = axis
+
+        if ndim == 0 or tupled_axis is None or keepdims:
+            # if ndim==0, x is a scalar, then y and gy are also scalar.
+            # hence no problem with broadchasting.
+            # if tupled_axis is None, y and gy are always scalar. 
+            # hence no problem with broadcasting.
+            # if keepdims==True, shape after sum is kept as same. 
+            # so no need to reshape to broadcast. 
+            return gy
+        else:
+            actual_axis = [a if a >= 0 else a + ndim for a in tupled_axis] # just deal with negative axes
+            shape = list(gy.shape)
+            for ax in sorted(actual_axis): # fill the summed dimentions with 1. So that broadcastable.
+                shape.insert(ax, 1)
+            
+            return gy.reshape(shape) 
+
+
+def sum(x, axis=None, keepdims=False):
+    return Sum(axis, keepdims)(x)
+
+
+class BroadcastTo(Function):
+    """ 
+    Class implementation for broadcast_to function. 
+    See doc of broadcast_to function below. 
+    """
+    def __init__(self, shape):
+        self.shape = shape
+    
+    def forward(self, x):
+        """ See doc of broadcast_to function below. """
+        self.x_shape = x.shape
+        xp = get_array_module(x)
+        y = xp.broadcast_to(x, self.shape)
+        return y
+    
+    def backward(self, gy):
+        """
+        Backward computation of broadcast_to is to sum up 
+        elements in gy to its original x.
+        Let's understand this with a couple of examples. 
+        e.g.1 x is a scalar
+              y = broadcast_to(x, (2,)) = [x, x]
+              L = 2y[0] + 3y[1]
+              Then, dL/dx = dL/dy0 * dy0/dx + dL/dy1 * dy1/dx
+              Note that dy0/dx == dy1/dx == 1 because y[0] and y[1]
+              are just exact copies of x. 
+              Hence, dL/dx = dL/dy0 + dL/dy1
+        e.g.2 x = [x0, x1, x2]
+              y = broadcast_to(x, (2,3)) = [[x0, x1, x2],[x0, x1, x2]]
+              L = 2y[0] + 3y[1]
+              dL/dx0 = dL/dy0 * dy0/dx0 + dL/dy1 * dy1/dx0
+              Note that dy0/dx0 == dy1/dx0 == [1,0,0]
+              Hence, dL/dx0 = (dL/dy0 + dL/dy1) * [1,0,0]
+
+        Parameters
+        ----------
+        gy: baredl.Variable
+            A grad from former backprop calculation.
+        """
+        gx = reverse_broadcast_to(gy, self.x_shape)
+        return gx
+
+
+def broadcast_to(x, shape):
+    """
+    Work as same as np.broadcast_to.
+    e.g. np.broadcast_to([5,6,7], (2,3)) -> [[5,6,7],[5,6,7]]
+    
+    Parameters
+    ----------
+    x: baredl.Variable or xp.ndarray (any shape)
+    
+    shape: tuple of ints 
+        Shape that x is broadcasted to. 
+        -> Limitation of shape that x can be broadcasted to.
+           In this example, assume shape is 2-dimention, say, shape = (r, c)
+           in that case, x.size needs to be 1, which means x is a scalar, or 
+           (c,) which means x is a 1-d array, or (1,c) which means 
+           x is a 2-d array but just like 1-d array shape. 
+
+    Returns
+    -------
+    y: baredl.Variable
+    """
+    if x.shape == shape:
+        return as_variable(x)
+    return BroadcastTo(shape)(x)
+
+
+class ReverseBroadcastTo(Function):
+    def __init__(self, shape):
+        self.shape = shape
+
+    def forward(self, x):
+        self.x_shape = x.shape
+        y = self._sum_to(x, self.shape)
+        return y
+
+    def backward(self, gy):
+        gx = broadcast_to(gy, self.x_shape)
+        return gx
+
+    def _sum_to(self, x, shape):
+        """Sum elements along axes to output an array of a given shape.
+        Args:
+            x (ndarray): Input array.
+            shape:
+        Returns:
+            ndarray: Output array of the shape.
+        """
+        ndim = len(shape)
+        lead = x.ndim - ndim
+        lead_axis = tuple(range(lead))
+
+        axis = tuple([i + lead for i, sx in enumerate(shape) if sx == 1])
+        y = x.sum(lead_axis + axis, keepdims=True)
+        if lead > 0:
+            y = y.squeeze(lead_axis)
+        return y
+
+
+def reverse_broadcast_to(x, shape):
+    if x.shape == shape:
+        return as_variable(x)
+    return ReverseBroadcastTo(shape)(x)
+
+
+class MatMul(Function):
+    def forward(self, x, W):
+        y = x.dot(W)
+        return y
+
+    def backward(self, gy):
+        x, W = self.inputs
+        gx = matmul(gy, W.T)
+        gW = matmul(x.T, gy)
+        return gx, gW
+
+
+def matmul(x, W):
+    return MatMul()(x, W)
+
+
+# -------------------------------------------------------------
+# max / min
+# -------------------------------------------------------------
+
+
+class Max(Function):
+    """
+    Parameters
+    ----------
+    axis: None or int or tuple of ints
+        Axis or axes along which a sum is performed. 
+        If None, will sum all of the elements of the input array.
+
+    keepdims: bool
+        If True, the dimension of the result Variable 
+        will be same dimension as the input Variable. 
+    """
+    def __init__(self, axis=None, keepdims=False):
+        self.axis = axis
+        self.keepdims = keepdims
+
+    def forward(self, x):
+        """
+        Parameters
+        ----------
+        x: np.ndarray (any shape)
+
+        Returns
+        -------
+        y: np.ndarray
+        """
+        y = x.max(axis=self.axis, keepdims=self.keepdims)
+        return y
+
+    def backward(self, gy):
+        """
+        Parameters
+        ----------
+        gy: Variable
+
+        Returns
+        -------
+        y: np.ndarray
+        """
+        x = self.inputs[0]
+        y = self.outputs[0]() # weakref
+        
+        shape = self._backward_shape(x, self.axis)
+        gy = reshape(gy, shape)
+        y = reshape(y, shape)
+        cond = (x.data == y.data)
+        gy = broadcast_to(gy, cond.shape)
+        return gy * cond
+    
+    def _backward_shape(self, x, axis):
+        if axis is None:
+            axis = range(x.ndim)
+        elif isinstance(axis, int):
+            axis = (axis,)
+        else:
+            axis = axis
+
+        shape = [s if ax not in axis else 1 for ax, s in enumerate(x.shape)]
+        return shape
+
+
+class Min(Max):
+    def forward(self, x):
+        y = x.min(axis=self.axis, keepdims=self.keepdims)
+        return y
+
+
+def max(x, axis=None, keepdims=False):
+    return Max(axis, keepdims)(x)
+
+
+def min(x, axis=None, keepdims=False):
+    return Min(axis, keepdims)(x)

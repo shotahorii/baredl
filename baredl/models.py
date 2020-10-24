@@ -1,4 +1,3 @@
-import numpy as np
 import baredl.functions as F
 import baredl.layers as L
 
