@@ -27,24 +27,24 @@ class Layer(metaclass=ABCMeta):
     def forward(self, inputs):
         pass
 
-    def params(self):
+    def parameters(self):
         for name in self._params:
             obj = self.__dict__[name]
             if isinstance(obj, Layer):
-                yield from obj.params()
+                yield from obj.parameters()
             else:
                 yield obj
 
-    def cleargrads(self):
-        for param in self.params():
+    def zero_grad(self):
+        for param in self.parameters():
             param.cleargrad()
 
     def to_cpu(self):
-        for param in self.params():
+        for param in self.parameters():
             param.to_cpu()
 
     def to_gpu(self):
-        for param in self.params():
+        for param in self.parameters():
             param.to_gpu()
 
     def _flatten_params(self, params_dict, parent_key=''):
@@ -82,28 +82,28 @@ class Layer(metaclass=ABCMeta):
 
 
 class Linear(Layer):
-    def __init__(self, out_size, in_size=None, nobias=False, dtype=np.float32):
+    def __init__(self, out_features, in_features=None, bias=True, dtype=np.float32):
         super().__init__()
-        self.in_size = in_size # we can leave this None, and get from data in forward
-        self.out_size = out_size
+        self.in_features = in_features # we can leave this None, and get from data in forward
+        self.out_features = out_features
         self.dtype = dtype
 
-        # init W. if in_size not specified, init later (when forward called)
+        # init W. if in_features not specified, init later (when forward called)
         self.W = Parameter(None, name='W')
-        if self.in_size is not None:
+        if self.in_features is not None:
             self._init_W()
         # init bias
-        self.b = None if nobias else Parameter(np.zeros(out_size, dtype=dtype), name='b')
+        self.b = None if not bias else Parameter(np.zeros(out_features, dtype=dtype), name='b')
 
     def _init_W(self, xp=np):
-        I, O = self.in_size, self.out_size
+        I, O = self.in_features, self.out_features
         # http://yann.lecun.com/exdb/publis/pdf/lecun-98b.pdf
         W_data = xp.random.randn(I, O).astype(self.dtype) * xp.sqrt(1 / I)
         self.W.data = W_data
 
     def forward(self, x):
         if self.W.data is None:
-            self.in_size = x.shape[1]
+            self.in_features = x.shape[1]
             xp = get_array_module(x)
             self._init_W(xp)
         

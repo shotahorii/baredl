@@ -11,7 +11,7 @@ class Optimiser(metaclass=ABCMeta):
         self.target = target
         return self
 
-    def update(self):
+    def step(self):
         # list parameters containing not None grad
         params = [p for p in self.target.params() if p.grad is not None]
 
@@ -21,6 +21,9 @@ class Optimiser(metaclass=ABCMeta):
 
         for p in params:
             self.update_one(p)
+
+    def zero_grad(self):
+        self.target.zero_grad()
 
     @abstractmethod
     def update_one(param):

@@ -18,12 +18,12 @@ except ImportError:
 
 def as_array(x, array_module=np):
     """
-    Convert scalar x to np.array datatype.
+    Convert scalar x to xp.array datatype.
     e.g. 3 -> np.array(3)
 
     Parameters
     ----------
-    x: np.ndarray (any shape), np.scalar or scalar
+    x: xp.ndarray (any shape), xp.scalar or scalar
     array_module: {numpy, cupy}
     """
     if np.isscalar(x):
@@ -31,22 +31,22 @@ def as_array(x, array_module=np):
     return x
 
 
-def as_variable(obj):
+def as_tensor(obj):
     """
-    Convert np.array object to Variable.
-    e.g. np.array([1,2]) -> Variable([1,2])
+    Convert np.array object to Tensor.
+    e.g. np.array([1,2]) -> Tensor([1,2])
 
     Parameters
     ----------
-    obj: np.ndarray (any shape) of real (-inf, inf)
+    obj: xp.ndarray (any shape) of real (-inf, inf)
     """
-    if isinstance(obj, Variable):
+    if isinstance(obj, Tensor):
         return obj
-    return Variable(obj)
+    return Tensor(obj)
 
 
 def as_numpy(x):
-    if isinstance(x, Variable):
+    if isinstance(x, Tensor):
         x = x.data
 
     if np.isscalar(x):
@@ -60,7 +60,7 @@ def as_numpy(x):
 
 
 def as_cupy(x):
-    if isinstance(x, Variable):
+    if isinstance(x, Tensor):
         x = x.data
 
     if cupy is None:
@@ -69,7 +69,7 @@ def as_cupy(x):
 
 
 def get_array_module(x):
-    if isinstance(x, Variable):
+    if isinstance(x, Tensor):
         x = x.data
 
     if cupy is None:
@@ -79,22 +79,22 @@ def get_array_module(x):
 
 
 # -------------------------------------------------------------
-# Variable / Parameter 
+# Tensor / Parameter 
 # -------------------------------------------------------------
 
 
-class Variable:
+class Tensor:
     """
     Data container class
 
     Parameters
     ----------
-    data: np.ndarray (any shape) of real (-inf, inf)
+    data: xp.ndarray (any shape) of real (-inf, inf)
     name: string
     """
 
     # to prioritise __radd__ of this class over np.ndarray's __add__
-    # when np.array([2.0]) + Variable(np.array([1.0]))
+    # when np.array([2.0]) + Tensor(np.array([1.0]))
     # also same for __rmul__ vs np.ndarray's __mul__
     __array_priority__ = 200  
     
@@ -106,27 +106,27 @@ class Variable:
         self.data = data
         self.name = name
         self.grad = None
-        self.creator = None # function which generated this Variable instance
-        # generation indicates "depth" of the position of this variable 
+        self.creator = None # function which generated this Tensor instance
+        # generation indicates "depth" of the position of this Tensor
         # in the calculation graph. This is important when we perform
         # backprop in a complex calculation graph.
         self.generation = 0
 
     def __len__(self):
-        """ define len(Variable) """
+        """ define len(Tensor) """
         return len(self.data)
 
     def __repr__(self):
-        """ define print(Variable) """
+        """ define print(Tensor) """
         if self.data is None:
-            return 'variable(None)'
-        p = str(self.data).replace('\n', '\n' + ' '*9) # 9 is length of "variable("
-        return 'variable(' + p + ')'
+            return 'tensor(None)'
+        p = str(self.data).replace('\n', '\n' + ' '*7) # 7 is length of "tensor("
+        return 'tensor(' + p + ')'
 
     def __getitem__(self, slices):
         """ 
-        define Variable[...] 
-        e.g. Variable[:,2] , Variable[1,1], Variable[[0,1,1]]
+        define Tensor[...] 
+        e.g. Tensor[:,2] , Tensor[1,1], Tensor[[0,1,1]]
         """
         return get_item(self, slices)
 
@@ -205,7 +205,7 @@ class Variable:
 
     def set_creator(self, func):
         self.creator = func
-        # generation of this Variable instance will be 1 step deeper 
+        # generation of this Tensor instance will be 1 step deeper 
         # than the function created this instance. 
         self.generation = func.generation + 1
 
@@ -214,14 +214,14 @@ class Variable:
 
     def backward(self, retain_grad=False, create_graph=False):
         """
-        calculate gradients of ancestor Variable instances by backprop.
+        calculate gradients of ancestor Tensor instances by backprop.
 
         Parameters
         ----------
         retain_grad: bool
-            If True, keep grad values of every single Variable instance
+            If True, keep grad values of every single Tensor instance
             in the calculation graph. 
-            If False, only keep grad values of "end node" Variable instances.
+            If False, only keep grad values of "end node" Tensor instances.
             This is for memory efficiency purpose. In most cases, False is fine. 
         
         create_graph: bool
@@ -230,8 +230,8 @@ class Variable:
             This needs to be True only if you need to do double backprop. 
         """
         
-        # "self.grad is None" means this Variable is the starting point
-        # of the backprop. Because if this Variable instance is in the 
+        # "self.grad is None" means this Tensor is the starting point
+        # of the backprop. Because if this Tensor instance is in the 
         # middle of backprop, self.grad should be already defined (not None)
         # by the time this backward is called. 
         # Init value is always 1 because, e.g. forward flow is "x -> z -> L"
@@ -239,7 +239,7 @@ class Variable:
         # where the starting point dL/dL is always 1. 
         if self.grad is None:
             xp = get_array_module(self.data)
-            self.grad = Variable(xp.ones_like(self.data)) # grad is also a Variable!! This allows us double backprop.
+            self.grad = Tensor(xp.ones_like(self.data)) # grad is also a Tensor! This allows us double backprop.
 
         # funcs is a list to store Function instances of which 
         # backward need to be called.
@@ -273,7 +273,7 @@ class Variable:
             # do not keep calculation graph for grad calculation.
             with using_config('enable_backprop', create_graph):
 
-                # calculate the gradients of f's inputs Variable instances
+                # calculate the gradients of f's inputs Tensor instances
                 # using gradients of f's outputs.
                 gxs = f.backward(*gys)
                 if not isinstance(gxs, tuple): # make sure gxs is a tuple format
@@ -306,7 +306,7 @@ class Variable:
     
 
 
-class Parameter(Variable):
+class Parameter(Tensor):
     pass
 
 
@@ -317,28 +317,28 @@ class Parameter(Variable):
 
 class Function:
     """
-    Base class of all functions defined in baredl, which operate/manipulate Variable instances.
-    Functions can take np.ndarray as a input but it will be converted into Variable. 
+    Base class of all functions defined in baredl, which operate/manipulate Tensor instances.
+    Functions can take np.ndarray as a input but it will be converted into Tensor. 
     """
 
     def __call__(self, *inputs):
         """
         Perform the operation (specified in self.forward) on the data of the given
-        Variable instances. Return the result as a (list of) Variable instance(s).
+        Tensor instances. Return the result as a (list of) Tensor instance(s).
 
         Parameters
         ----------
-        inputs: a tuple of one or more of Variable or np.ndarray (any shape) of real (-inf, inf)
+        inputs: a tuple of one or more of Tensor or np.ndarray (any shape) of real (-inf, inf)
 
         Returns
         -------
-        Outputs: a list of Variable, or a Variable
+        Outputs: a list of Tensor, or a Tensor
         """
 
-        # make sure every input is Variable datatype
-        inputs = [as_variable(input) for input in inputs]
+        # make sure every input is Tensor datatype
+        inputs = [as_tensor(input) for input in inputs]
 
-        # take data (np.ndarray) from each input (Variable)
+        # take data (np.ndarray) from each input (Tensor)
         xs = [input.data for input in inputs] # xs: list of np.ndarray
 
         # perform operation on the data (np.ndarray)
@@ -347,8 +347,8 @@ class Function:
             ys = (ys,)
 
         # each element of the tuple ys is most likely to be a np.ndarray
-        # but in case of it's a scalar, apply as_array() and then make it as a Variable.
-        outputs = [Variable(as_array(y)) for y in ys]
+        # but in case of it's a scalar, apply as_array() and then make it as a Tensor.
+        outputs = [Tensor(as_array(y)) for y in ys]
 
         # Keeping references to inputs / outputs are for backprop purpose. 
         # This is always needed at training, but no need at inference (prediction). 
@@ -384,11 +384,11 @@ class Function:
         return outputs if len(outputs) > 1 else outputs[0]
     
     def forward(self, x):
-        """ x should be one or more of np.ndarray (input Variable's data) """
+        """ x should be one or more of np.ndarray (input Tensor's data) """
         raise NotImplementedError()
 
     def backward(self, gy):
-        """ gy should be one or more of Variable (output Variable's grad) """
+        """ gy should be one or more of Tensor (output Tensor's grad) """
         raise NotImplementedError()
 
 
@@ -412,7 +412,7 @@ class Add(Function):
         """
         Parameters
         ----------
-        gy: baredl.Variable
+        gy: baredl.Tensor
             A grad from former backprop calculation.
             e.g. Assume L = 2y, y = x0 + x1
                  Then, dL/dx = dL/dy * dy/dx
@@ -434,17 +434,17 @@ class Add(Function):
 
 def add(x0, x1):
     """
-    Basic arithmetic '+' operation for bareml.Variable.
-    Used only to override Variable class's __add__ and __radd__.
+    Basic arithmetic '+' operation for bareml.Tensor.
+    Used only to override Tensor class's __add__ and __radd__.
 
     Parameters
     ----------
     x0: xp.ndarray (any shape)
     x1: xp.ndarray (any shape) or scalar
         Note that since this function is only called 
-        via Variable class's __add__ and __radd__, 
-        x0 is always xp.ndarray (Variable.data) but 
-        x1 can be scalar. e.g. Variable(1) + 3
+        via Tensor class's __add__ and __radd__, 
+        x0 is always xp.ndarray (Tensor.data) but 
+        x1 can be scalar. e.g. Tensor(1) + 3
     """
     x1 = as_array(x1, get_array_module(x0.data))
     return Add()(x0, x1)
@@ -521,10 +521,10 @@ class Pow(Function):
 def mul(x0, x1):
     """ 
     x0, x1: np.ndarray (any shape) or scalar 
-    Since this function is only used to override Variable class's 
+    Since this function is only used to override Tensor class's 
     __mul__ and __rmul__, 
-    input x0 is always a Variable's data. Which means always np.ndarray.
-    In contrast, x1 can be a scalar. e.g. Variable(np.array(1)) * 3.0
+    input x0 is always a Tensor's data. Which means always np.ndarray.
+    In contrast, x1 can be a scalar. e.g. Tensor(np.array(1)) * 3.0
     """
     x1 = as_array(x1, get_array_module(x0.data))
     return Mul()(x0, x1)
@@ -533,9 +533,9 @@ def mul(x0, x1):
 def neg(x):
     """ 
     x: np.ndarray (any shape)
-    Since this function is only used to override Variable class's 
+    Since this function is only used to override Tensor class's 
     __neg__, 
-    input x is always a Variable's data. Which means always np.ndarray.
+    input x is always a Tensor's data. Which means always np.ndarray.
     """
     return Neg()(x)
 
@@ -543,10 +543,10 @@ def neg(x):
 def sub(x0, x1):
     """ 
     x0, x1: np.ndarray (any shape) or scalar 
-    Since this function is only used to override Variable class's 
+    Since this function is only used to override Tensor class's 
     __sub__, 
-    input x0 is always a Variable's data. Which means always np.ndarray.
-    In contrast, x1 can be a scalar. e.g. Variable(np.array(1)) - 3.0
+    input x0 is always a Tensor's data. Which means always np.ndarray.
+    In contrast, x1 can be a scalar. e.g. Tensor(np.array(1)) - 3.0
     """
     x1 = as_array(x1, get_array_module(x0.data))
     return Sub()(x0, x1)
@@ -555,10 +555,10 @@ def sub(x0, x1):
 def rsub(x0, x1):
     """ 
     x0, x1: np.ndarray (any shape) or scalar 
-    Since this function is only used to override Variable class's 
+    Since this function is only used to override Tensor class's 
     __rsub__, 
-    input x0 is always a Variable's data. Which means always np.ndarray.
-    In contrast, x1 can be a scalar. e.g. 3.0 - Variable(np.array(1))
+    input x0 is always a Tensor's data. Which means always np.ndarray.
+    In contrast, x1 can be a scalar. e.g. 3.0 - Tensor(np.array(1))
     """
     x1 = as_array(x1, get_array_module(x0.data))
     return Sub()(x1, x0)
@@ -644,7 +644,7 @@ class Reshape(Function):
 
 def reshape(x, shape):
     if x.shape == shape:
-        return as_variable(x)
+        return as_tensor(x)
     return Reshape(shape)(x)
 
 
@@ -653,7 +653,7 @@ def flatten(x):
 
 
 def expand_dims(x, axis):
-    x = as_variable(x)
+    x = as_tensor(x)
     shape = list(x.shape)
     shape.insert(axis, 1)
     return reshape(x, tuple(shape))
@@ -701,13 +701,13 @@ class Sum(Function):
         # To do so, we firstly want to make sure input gy has  
         # the shape which is broadcast-able to original x shape.
         # What does this mean? For example, 
-        # x = Variable(np.array([[1,2,3],[4,5,6]]))
+        # x = Tensor(np.array([[1,2,3],[4,5,6]]))
         # y = sum(x, axis=1, keepdims=False)
-        # then, y is Variable([6, 15])
-        # hence, gy is Variable([1, 1])
+        # then, y is Tensor([6, 15])
+        # hence, gy is Tensor([1, 1])
         # now, x.shape is (2,3)
-        # Variable([1, 1]) cannot be broadcasted to Variable([[1,1,1],[1,1,1]])
-        # i.e. gy needs to be Variable([[1], [1]]) instead of Variable([1, 1])        
+        # Tensor([1, 1]) cannot be broadcasted to Tensor([[1,1,1],[1,1,1]])
+        # i.e. gy needs to be Tensor([[1], [1]]) instead of Tensor([1, 1])        
         gy = self._reshape_broadcastable(gy, self.x_shape, self.axis, self.keepdims)
         gx = broadcast_to(gy, self.x_shape)
         return gx
@@ -718,8 +718,8 @@ class Sum(Function):
         
         Parameters
         ----------
-        gy: Variable
-            Gradient variable from the output by backprop.
+        gy: baredl.Tensor
+            Gradient tensor from the output by backprop.
         
         x_shape: tuple
             Shape used at sum function's forward.
@@ -732,8 +732,8 @@ class Sum(Function):
         
         Returns
         -------
-        Variable
-            Gradient variable which is reshaped appropriately
+        baredl.Tensor
+            Gradient tensor which is reshaped appropriately
         """
         ndim = len(x_shape)
 
@@ -802,7 +802,7 @@ class BroadcastTo(Function):
 
         Parameters
         ----------
-        gy: baredl.Variable
+        gy: baredl.Tensor
             A grad from former backprop calculation.
         """
         gx = reverse_broadcast_to(gy, self.x_shape)
@@ -816,7 +816,7 @@ def broadcast_to(x, shape):
     
     Parameters
     ----------
-    x: baredl.Variable or xp.ndarray (any shape)
+    x: baredl.Tensor or xp.ndarray (any shape)
     
     shape: tuple of ints 
         Shape that x is broadcasted to. 
@@ -828,10 +828,10 @@ def broadcast_to(x, shape):
 
     Returns
     -------
-    y: baredl.Variable
+    y: baredl.Tensor
     """
     if x.shape == shape:
-        return as_variable(x)
+        return as_tensor(x)
     return BroadcastTo(shape)(x)
 
 
@@ -869,7 +869,7 @@ class ReverseBroadcastTo(Function):
 
 def reverse_broadcast_to(x, shape):
     if x.shape == shape:
-        return as_variable(x)
+        return as_tensor(x)
     return ReverseBroadcastTo(shape)(x)
 
 
@@ -903,8 +903,8 @@ class Max(Function):
         If None, will sum all of the elements of the input array.
 
     keepdims: bool
-        If True, the dimension of the result Variable 
-        will be same dimension as the input Variable. 
+        If True, the dimension of the result Tensor
+        will be same dimension as the input Tensor. 
     """
     def __init__(self, axis=None, keepdims=False):
         self.axis = axis
@@ -927,7 +927,7 @@ class Max(Function):
         """
         Parameters
         ----------
-        gy: Variable
+        gy: baredl.Tensor
 
         Returns
         -------

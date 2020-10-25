@@ -1,5 +1,5 @@
 import numpy as np
-from baredl.core import Variable, Function, as_variable, sum_to, get_array_module
+from baredl.core import Tensor, Function, reverse_broadcast_to, get_array_module
 from baredl.config import Config
 from baredl.utils import logsumexp
 
@@ -152,6 +152,27 @@ def relu(x):
     return ReLU()(x)
 
 
+class LeakyReLU(Function):
+    def __init__(self, slope):
+        self.slope = slope
+
+    def forward(self, x):
+        y = x.copy()
+        y[x <= 0] *= self.slope
+        return y
+
+    def backward(self, gy):
+        x, = self.inputs 
+        mask = (x.data > 0).astype(gy.dtype)
+        mask[mask <= 0] = self.slope
+        gx = gy * mask
+        return gx
+
+
+def leaky_relu(x, slope=0.2):
+    return LeakyReLU(slope)(x)
+
+
 # -------------------------------------------------------------
 # Loss functions: mean_squared_error
 # -------------------------------------------------------------
@@ -214,7 +235,7 @@ class Linear(Function):
 
     def backward(self, gy):
         x, W, b = self.inputs
-        gb = None if b.data is None else sum_to(gy, b.shape)
+        gb = None if b.data is None else reverse_broadcast_to(gy, b.shape)
         gx = gy @ W.T # gx = matmul(gy, W.T)
         gW = x.T @ gy # gW = matmul(x.T, gy)
         return gx, gW, gb
