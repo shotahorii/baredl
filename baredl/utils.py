@@ -64,6 +64,7 @@ def numerical_diff(f, x, eps=1e-4):
 def get_conv_outsize(in_size, ker_size, stride, pad):
     """
     Calculate output size of conv operation.
+    Kalculate for either height or width each. 
 
     Parameters
     ----------
@@ -75,24 +76,169 @@ def get_conv_outsize(in_size, ker_size, stride, pad):
     return (in_size + pad * 2 - ker_size) // stride + 1
 
 
+def get_deconv_outsize(in_size, ker_size, stride, pad):
+    """
+    Calculate output size of transpose conv operation.
+    Kalculate for either height or width each. 
+
+    Parameters
+    ----------
+    in_size: int    input size
+    ker_size: int   kernel size
+    stride: int     stride
+    pad: int        padding
+    """
+    return stride * (in_size - 1) + ker_size - 2 * pad
+
+
 def im2col_array(img, kernel_size, stride, pad, to_matrix=True):
+    """
+    Purpose of this function is to convert an image (N, C, H, Width)
+    into the shape that is tensordot-able with W (OC, C, KH, KW).
+    The output shape would be (N, C, KH, KW, OH, OW), which is 
+    tensordot-able in (1,2,3) axis. 
+    https://www.youtube.com/watch?v=PWPJVws7l0M&feature=emb_title (in JP)
+    
+    Parameters
+    ----------
+    img: xp.array (N, C, H, Width)
+        N: number of samples (images)
+        C: number of channels
+        H: height of the images
+        Width: width of the images
+        e.g. img with shape (3,2,3,4) is like below.
+            np.array([
+                # sample1
+                [
+                    [[0,0,0,0],[0,0,0,0],[0,0,0,0]], # channel1 (3*4 matrix)
+                    [[0,0,0,0],[0,0,0,0],[0,0,0,0]]  # channel2 (3*4 matrix)
+                ],
+                # sample2
+                [
+                    [[0,0,0,0],[0,0,0,0],[0,0,0,0]], # channel1 (3*4 matrix)
+                    [[0,0,0,0],[0,0,0,0],[0,0,0,0]]  # channel2 (3*4 matrix)
+                ],
+                # sample 3
+                [
+                    [[0,0,0,0],[0,0,0,0],[0,0,0,0]], # channel1 (3*4 matrix)
+                    [[0,0,0,0],[0,0,0,0],[0,0,0,0]]  # channel2 (3*4 matrix)
+                ],
+            ])
+
+    kernel_size: int K or tuple of 2 ints (KH, KW)
+        KH: height of the kernel
+        KW: width of the kernel
+        if the input is an int K, KH = KW = K
+
+    stride: int or tuple of 2 ints    stride
+
+    pad: int or tuple of 2 ints       padding
+
+    Returns
+    -------
+    col: xp.ndarray (N, C, KH, KW, OH, OW)
+
+    """
 
     N, C, H, W = img.shape
     KH, KW = pair(kernel_size)
     SH, SW = pair(stride)
     PH, PW = pair(pad)
-    OH = get_conv_outsize(H, KH, SH, PH)
-    OW = get_conv_outsize(W, KW, SW, PW)
+    OH = get_conv_outsize(H, KH, SH, PH) # output height 
+    OW = get_conv_outsize(W, KW, SW, PW) # output width
 
     xp = get_array_module(img)
     if xp != np:
         col = _im2col_gpu(img, kernel_size, stride, pad)
     else:
-        img = np.pad(img,
-                     ((0, 0), (0, 0), (PH, PH + SH - 1), (PW, PW + SW - 1)),
-                     mode='constant', constant_values=(0,))
+        # the pad width of the first 2 dimensions are both (0, 0), which 
+        # means no padding applied to those dimensions = samples & channels.
+        # the padding applied to the last 2 dimensions = img height & width.
+        pad_width = ((0, 0), (0, 0), (PH, PH + SH - 1), (PW, PW + SW - 1))
+        
+        # pad_fill specifies only 1 value here. 
+        # this means this value (0,) applies to all dimensions. 
+        pad_fill = (0,)
+
+        """
+        np.pad(...) adds padding in the given img. 
+        Let's assume SH = SW = PH = PW = 1, which means 
+        pad_width = ((0, 0), (0, 0), (1, 1), (1, 1)), 
+        and the input img is below array (3,2,3,4).
+            np.array([
+                # sample1
+                [
+                    [[1,1,1,1],[1,1,1,1],[1,1,1,1]], # channel1 (3*4 matrix)
+                    [[1,1,1,1],[1,1,1,1],[1,1,1,1]]  # channel2 (3*4 matrix)
+                ],
+                # sample2
+                [
+                    [[1,1,1,1],[1,1,1,1],[1,1,1,1]], # channel1 (3*4 matrix)
+                    [[1,1,1,1],[1,1,1,1],[1,1,1,1]]  # channel2 (3*4 matrix)
+                ],
+                # sample 3
+                [
+                    [[1,1,1,1],[1,1,1,1],[1,1,1,1]], # channel1 (3*4 matrix)
+                    [[1,1,1,1],[1,1,1,1],[1,1,1,1]]  # channel2 (3*4 matrix)
+                ],
+            ])
+        Then, the output would be below:
+            np.array([
+                # sample1
+                [
+                    [[0,0,0,0,0,0],[0,1,1,1,1,0],[0,1,1,1,1,0],[0,1,1,1,1,0],[0,0,0,0,0,0]], # channel1 (5*6 matrix)
+                    [[0,0,0,0,0,0],[0,1,1,1,1,0],[0,1,1,1,1,0],[0,1,1,1,1,0],[0,0,0,0,0,0]]  # channel2 (5*6 matrix)
+                ],
+                # sample2
+                [
+                    [[0,0,0,0,0,0],[0,1,1,1,1,0],[0,1,1,1,1,0],[0,1,1,1,1,0],[0,0,0,0,0,0]], # channel1 (5*6 matrix)
+                    [[0,0,0,0,0,0],[0,1,1,1,1,0],[0,1,1,1,1,0],[0,1,1,1,1,0],[0,0,0,0,0,0]]  # channel2 (5*6 matrix)
+                ],
+                # sample 3
+                [
+                    [[0,0,0,0,0,0],[0,1,1,1,1,0],[0,1,1,1,1,0],[0,1,1,1,1,0],[0,0,0,0,0,0]], # channel1 (5*6 matrix)
+                    [[0,0,0,0,0,0],[0,1,1,1,1,0],[0,1,1,1,1,0],[0,1,1,1,1,0],[0,0,0,0,0,0]]  # channel2 (5*6 matrix)
+                ],
+            ])
+        """
+        img = np.pad(img, pad_width, mode='constant', constant_values=pad_fill)
+
+        """
+        Make an empty container of 6-dim array (Note: below [[*]] = an empty OH*OW matrix)
+        Assuming KH = KW = 2, then
+            np.array([
+                # sample1
+                [
+                    [ [[[*]], [[*]]], [[[*]], [[*]]] ], # channel1 (KH*KW matrix of OH*OW matrix)
+                    [ [[[*]], [[*]]], [[[*]], [[*]]] ]  # channel2 (KH*KW matrix of OH*OW matrix)
+                ],
+                # sample2
+                [ 
+                    [ [[[*]], [[*]]], [[[*]], [[*]]] ], # channel1 (KH*KW matrix of OH*OW matrix)
+                    [ [[[*]], [[*]]], [[[*]], [[*]]] ]  # channel2 (KH*KW matrix of OH*OW matrix)
+                ],
+                # sample 3
+                [
+                    [ [[[*]], [[*]]], [[[*]], [[*]]] ], # channel1 (KH*KW matrix of OH*OW matrix)
+                    [ [[[*]], [[*]]], [[[*]], [[*]]] ]  # channel2 (KH*KW matrix of OH*OW matrix)
+                ],
+            ])
+        """
         col = np.ndarray((N, C, KH, KW, OH, OW), dtype=img.dtype)
 
+        # Note that, OH is the height of the output image, but 
+        # at the same time, OH also means the number of kernel 
+        # application to the input image in height (vertical) direction. 
+        # This is same for OW. 
+        #
+        # [j, i] represents each pixel of the kernel.
+        # j represents the position of vertical direction. 
+        # for each j in KH, j is the first position in img to sweep through,
+        # and j_lim = j + SH * OH is the end position in img after the sweep. 
+        # This is same for i and i_lim = i + SW * OW.
+        #
+        # So, j:j_lim:SH, i:i_lim:SW represents all the positions in the img
+        # where the kernel's pixcel [j, i] goes through. 
         for j in range(KH):
             j_lim = j + SH * OH
             for i in range(KW):
@@ -106,6 +252,54 @@ def im2col_array(img, kernel_size, stride, pad, to_matrix=True):
 
 
 def col2im_array(col, img_shape, kernel_size, stride, pad, to_matrix=True):
+    """
+    Purpose of this function is to convert a "col" array (N, C, KH, KW, OH, OW)
+    into the shape of its original image (N, C, H, W).
+    Can be considered as a reverse function of im2col_array above, but 
+    note that col2im(im2col(img)) != img in general, because col2im adds 
+    values in overlapped kernel areas multiple times.
+
+    Parameters
+    ----------
+    col: xp.ndarray (N, C, KH, KW, OH, OW)
+        e.g. Assuming N = 3, C=2, KH = KW = 2, then below. (Note: below [[*]] = an empty OH*OW matrix)
+            np.array([
+                # sample1
+                [
+                    [ [[[*]], [[*]]], [[[*]], [[*]]] ], # channel1 (KH*KW matrix of OH*OW matrix)
+                    [ [[[*]], [[*]]], [[[*]], [[*]]] ]  # channel2 (KH*KW matrix of OH*OW matrix)
+                ],
+                # sample2
+                [ 
+                    [ [[[*]], [[*]]], [[[*]], [[*]]] ], # channel1 (KH*KW matrix of OH*OW matrix)
+                    [ [[[*]], [[*]]], [[[*]], [[*]]] ]  # channel2 (KH*KW matrix of OH*OW matrix)
+                ],
+                # sample 3
+                [
+                    [ [[[*]], [[*]]], [[[*]], [[*]]] ], # channel1 (KH*KW matrix of OH*OW matrix)
+                    [ [[[*]], [[*]]], [[[*]], [[*]]] ]  # channel2 (KH*KW matrix of OH*OW matrix)
+                ],
+            ])
+
+    img_shape: tuple (N, C, H, W)
+        N: number of samples
+        C: number of channels
+        H: height of the image
+        W: width of the image
+
+    kernel_size: int K or tuple of 2 ints (KH, KW)
+        KH: height of the kernel
+        KW: width of the kernel
+        if the input is an int K, KH = KW = K
+
+    stride: int or tuple of 2 ints    stride
+
+    pad: int or tuple of 2 ints       padding
+
+    Returns
+    -------
+    img: xp.array (N, C, H, W)
+    """
     N, C, H, W = img_shape
     KH, KW = pair(kernel_size)
     SH, SW = pair(stride)
@@ -128,7 +322,10 @@ def col2im_array(col, img_shape, kernel_size, stride, pad, to_matrix=True):
             for i in range(KW):
                 i_lim = i + SW * OW
                 img[:, :, j:j_lim:SH, i:i_lim:SW] += col[:, :, j, i, :, :]
-        return img[:, :, PH:H + PH, PW:W + PW]
+
+        # exclude padding area of the image
+        img_without_pad = img[:, :, PH:H + PH, PW:W + PW]
+        return img_without_pad
 
 
 def _im2col_gpu(img, kernel_size, stride, pad):

@@ -4,6 +4,7 @@ from abc import ABCMeta, abstractmethod
 import numpy as np
 from baredl.core import Parameter, get_array_module
 import baredl.functions as F
+from baredl.utils import pair
 
 
 class Layer(metaclass=ABCMeta):
@@ -92,23 +93,9 @@ class Layer(metaclass=ABCMeta):
             param.data = npz[key]
 
 
-class Sequential(Layer):
-    def __init__(self, *layers):
-        if not layers:
-            raise ValueError('At least one layer needed.')
-        elif not all([isinstance(l, Layer) for l in layers]):
-            raise ValueError('Every input needs to be a Layer instance.')
-
-        super().__init__()
-        self.layers = []
-        for i, layer in enumerate(layers):
-            setattr(self, 'l'+str(i), layer)
-            self.layers.append(layer)
-            
-    def forward(self, x):  
-        for layer in self.layers:
-            x = layer(x)
-        return x
+# -------------------------------------------------------------
+# Linear / Dropout
+# -------------------------------------------------------------
 
 
 class Linear(Layer):
@@ -149,3 +136,82 @@ class Dropout(Layer):
     def forward(self, x):
         y = F.dropout(x, dropout_ratio=self.p, training=self.training)
         return y
+
+
+# -------------------------------------------------------------
+# Conv2d / ConvTranspose2d
+# -------------------------------------------------------------
+
+
+class Conv2d(Layer):
+    def __init__(self, out_channels, kernel_size, stride=1, pad=0, bias=True, dtype=np.float32, in_channels=None):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.pad = pad
+        self.dtype = dtype
+
+        self.W = Parameter(None, name='W')
+        if in_channels is not None:
+            self._init_W()
+        
+        if bias:
+            self.b = Parameter(np.zeros(out_channels, dtype=dtype), name='b')
+        else:
+            self.b = None
+
+    def _init_W(self, xp=np):
+        C, OC = self.in_channels, self.out_channels
+        KH, KW = pair(self.kernel_size)
+        scale = np.sqrt(1 / (C * KH * KW))
+        W_data = xp.random.randn(OC, C, KH, KW).astype(self.dtype) * scale
+        self.W.data = W_data
+    
+    def forward(self, x):
+        if self.W.data is None:
+            self.in_channels = x.shape[1]
+            xp = get_array_module(x)
+            self._init_W(xp)
+
+        y = F.conv2d(x, self.W, self.b, self.stride, self.pad)
+        return y
+
+
+class ConvTranspose2d(Layer):
+    def __init__(self, out_channels, kernel_size, stride=1, pad=0, bias=True, dtype=np.float32, in_channels=None):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.pad = pad 
+        self.dtype = dtype
+
+        self.W = Parameter(None, name='W')
+        if in_channels is not None:
+            self._init_W()
+        
+        if bias:
+            self.b = Parameter(np.zeros(out_channels, dtype=dtype), name='b')
+        else:
+            self.b = None
+
+    def _init_W(self, xp=np):
+        C, OC = self.in_channels, self.out_channels
+        KH, KW = pair(self.kernel_size)
+        scale = np.sqrt(1 / (C * KH * KW))
+        W_data = xp.random.randn(C, OC, KH, KW).astype(self.dtype) * scale
+        self.W.data = W_data
+
+    def forward(self, x):
+        if self.W.data is None:
+            self.in_channels = x.shape[1]
+            xp = get_array_module(x)
+            self._init_W(xp)
+
+        y = F.conv_transpose2d(x, self.W, self.b, self.stride, self.pad)
+        return y
+
+

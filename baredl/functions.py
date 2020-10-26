@@ -1,6 +1,6 @@
 import numpy as np
 from baredl.core import Tensor, Function, reverse_broadcast_to, get_array_module
-from baredl.utils import logsumexp
+from baredl.utils import logsumexp, pair, im2col_array, col2im_array, get_deconv_outsize
 
 
 # -------------------------------------------------------------
@@ -10,11 +10,29 @@ from baredl.utils import logsumexp
 
 class Exp(Function):
     def forward(self, x):
+        """
+        Parameters
+        ----------
+        x: xp.ndarray (baredl.Tensor.data)
+
+        Returns
+        -------
+        y: xp.ndarray
+        """
         xp = get_array_module(x)
         y = xp.exp(x)
         return y
 
     def backward(self, gy):
+        """
+        Parameters
+        ----------
+        gy: baredl.Tensor (baredl.Tensor.grad)
+
+        Returns
+        -------
+        gx: baredl.Tensor
+        """
         #x = self.inputs[0].data
         #gx = np.exp(x) * gy
         y = self.outputs[0]() # weakref
@@ -266,3 +284,306 @@ class Dropout(Function):
 
 def dropout(x, dropout_ratio=0.5, training=True):
     return Dropout(dropout_ratio)(x, training)
+
+
+# -------------------------------------------------------------
+# Conv functions: 
+# -------------------------------------------------------------
+
+
+class Conv2d(Function):
+
+    def __init__(self, stride=1, pad=0):
+        super().__init__()
+        self.stride = pair(stride)
+        self.pad = pair(pad)
+
+    def forward(self, x, W, b):
+        """
+        Parameters
+        ----------
+        x: xp.ndarray (N, C, H, Width)
+            N: number of samples (images)
+            C: number of channels
+            H: height of the images
+            Width: width of the images
+            e.g. x with shape (3,2,3,4) is like below.
+                np.array([
+                    # sample1
+                    [
+                        [[0,0,0,0],[0,0,0,0],[0,0,0,0]], # channel1 (3*4 matrix)
+                        [[0,0,0,0],[0,0,0,0],[0,0,0,0]]  # channel2 (3*4 matrix)
+                    ],
+                    # sample2
+                    [
+                        [[0,0,0,0],[0,0,0,0],[0,0,0,0]], # channel1 (3*4 matrix)
+                        [[0,0,0,0],[0,0,0,0],[0,0,0,0]]  # channel2 (3*4 matrix)
+                    ],
+                    # sample 3
+                    [
+                        [[0,0,0,0],[0,0,0,0],[0,0,0,0]], # channel1 (3*4 matrix)
+                        [[0,0,0,0],[0,0,0,0],[0,0,0,0]]  # channel2 (3*4 matrix)
+                    ],
+                ])
+
+        W: xp.ndarray (OC, C, KH, KW)
+            OC: number of output channels
+            C: number of channels 
+            KH: height of the kernel (filter)
+            KW: width of the kernel (filter)
+            e.g. W with shape (4,2,2,2) is like below.
+                np.array([
+                    # output channel 1
+                    [
+                        [[0,0],[0,0]], # channel1 (2*2 kernel)
+                        [[0,0],[0,0]]  # channel2 (2*2 kernel)
+                    ],
+                    # output channel 2
+                    [
+                        [[0,0],[0,0]], # channel1 (2*2 kernel)
+                        [[0,0],[0,0]]  # channel2 (2*2 kernel)
+                    ],
+                    # output channel 3
+                    [
+                        [[0,0],[0,0]], # channel1 (2*2 kernel)
+                        [[0,0],[0,0]]  # channel2 (2*2 kernel)
+                    ],
+                    # output channel 4
+                    [
+                        [[0,0],[0,0]], # channel1 (2*2 kernel)
+                        [[0,0],[0,0]  # channel2 (2*2 kernel)
+                    ],
+                ])
+
+        b: xp.ndarray (OC,)
+            OC: number of output channels
+            e.g. b with shape (4,) is like below.
+                np.array([0, 0, 0, 0]) # each 0 is for each output channel
+
+        Returns
+        -------
+        y: xp.ndarray (N, OC, OH, OW)
+            N: number of samples (images)
+            OC: number of output channels
+            OH: height of output images
+            OW: width of output images
+            e.g. with all the examples above, y's shape would be (3,4,2,3) like below.
+                np.array([
+                    # sample1
+                    [
+                        [[0,0,0],[0,0,0]], # output channel1 (2*3 matrix)
+                        [[0,0,0],[0,0,0]], # output channel2 (2*3 matrix)
+                        [[0,0,0],[0,0,0]], # output channel3 (2*3 matrix)
+                        [[0,0,0],[0,0,0]], # output channel4 (2*3 matrix)
+                    ],
+                    # sample2
+                    [
+                        [[0,0,0],[0,0,0]], # output channel1 (2*3 matrix)
+                        [[0,0,0],[0,0,0]], # output channel2 (2*3 matrix)
+                        [[0,0,0],[0,0,0]], # output channel3 (2*3 matrix)
+                        [[0,0,0],[0,0,0]], # output channel4 (2*3 matrix)
+                    ],
+                    # sample 3
+                    [
+                        [[0,0,0],[0,0,0]], # output channel1 (2*3 matrix)
+                        [[0,0,0],[0,0,0]], # output channel2 (2*3 matrix)
+                        [[0,0,0],[0,0,0]], # output channel3 (2*3 matrix)
+                        [[0,0,0],[0,0,0]], # output channel4 (2*3 matrix)
+                    ],
+                ])
+        """
+        xp = get_array_module(x)
+
+        KH, KW = W.shape[2:]
+
+        # col is a xp.ndarray (N, C, KH, KW, OH, OW)
+        col = im2col_array(x, (KH, KW), self.stride, self.pad, to_matrix=False)
+
+        # col is a xp.ndarray (N,  C, KH, KW, OH, OW)
+        # W   is a xp.ndarray (OC, C, KH, KW)
+        # y   is a xp.ndarray (N, OH, OW, OC)
+        axes = ((1, 2, 3), (1, 2, 3))
+        y = xp.tensordot(col, W, axes=axes)
+
+        if b is not None:
+            # y is a xp.ndarray (N, OH, OW, OC)
+            # b is a xp.ndarray (OC,)
+            # here, b is broadcasted to (1, 1, 1, OC) then (N, OH, OW, OC)
+            y += b
+
+        # (N, OH, OW, OC) to (N, OC, OH, OW)
+        y = xp.rollaxis(y, 3, 1)
+
+        return y
+
+    def backward(self, gy):
+        """
+        Parameters
+        ----------
+        gy: baredl.Tensor (N, OC, OH, OW)
+            forward's output's grad.
+
+        Returns 
+        -------
+        gx: baredl.Tensor (N, C, H, Width)
+
+        gW: baredl.Tensor (OC, C, KH, KW)
+        
+        gb: baredl.Tensor (OC,)
+        """
+        x, W, b = self.inputs
+
+        H, Width = x.shape[2], x.shape[3]
+        
+        gx = conv_transpose2d(gy, W, b=None, stride=self.stride, pad=self.pad, outsize=(H, Width))
+        gW = conv2d_grad_w(x, gy, self)
+        gb = None
+
+        # note b (input) is stored as a Tensor even if it's None.
+        if b.data is not None:
+            gb = gy.sum(axis=(0, 2, 3))
+
+        return gx, gW, gb
+
+
+def conv2d(x, W, b=None, stride=1, pad=0):
+    return Conv2d(stride, pad)(x, W, b)
+
+
+class ConvTranspose2d(Function):
+    
+    def __init__(self, stride=1, pad=0, outsize=None):
+        super().__init__()
+        self.stride = pair(stride)
+        self.pad = pair(pad)
+        self.outsize = outsize
+
+    def forward(self, x, W, b):
+        """
+        Parameters
+        ----------
+        x: xp.ndarray (N, C, H, Width)
+            N: number of samples (images)
+            C: number of channels
+            H: height of the images
+            Width: width of the images
+        
+        W: xp.ndarray (C, OC, KH, KW)
+            C: number of channels
+            OC: number of output channels
+            KH: height of the kernel (filter)
+            KW: width of the kernel (filter)
+            Note that shape of the input W in Conv2d is (OC, C, KH, KW)
+            whereas this input W is (C, OC, KH, KW). This is because Conv2d's 
+            input channel C is the output channel OC from the perspective of ConvTranspose2d.
+            And Conv2d's output chanel OC is the input chanel C of the ConvTranspose2d.
+            So, same W, but the way we call C, OC is opposite from the perspective of Conv2d 
+            vs ConvTranspose2d.
+
+        b: xp.ndarray (OC,)
+            OC: number of output channels
+            e.g. b with shape (4,) is like below.
+                np.array([0, 0, 0, 0]) # each 0 is for each output channel
+
+        Returns
+        -------
+        y: xp.ndarray (N, OC, OH, OW)
+        """
+        xp = get_array_module(x)
+
+        Weight = W
+        SH, SW = self.stride
+        PH, PW = self.pad
+        C, OC, KH, KW = Weight.shape
+        N, C, H, W = x.shape 
+
+        if self.outsize is None:
+            OH = get_deconv_outsize(H, KH, SH, PH)
+            OW = get_deconv_outsize(W, KW, SW, PW)
+        else:
+            OH, OW = pair(self.outsize)
+
+        # Note that ConvTranspose2d is reverse operation of Conv2d.
+        # So, below (N, OC, OH, OW) is Conv2d's (N, C, H, W)
+        img_shape = (N, OC, OH, OW)
+
+        # Weight's shape is (C, OC, KH, KW)
+        # x's shape is      (N, C,  H,  W)
+        # gcol's shape is   (OC, KH, KW, N, H, W)
+        gcol = xp.tensordot(Weight, x, (0,1))
+
+        # (OC, KH, KW, N, H, W) to (N, OC, KH, KW, H, W)
+        gcol = xp.rollaxis(gcol, 3)
+
+        # y's shape is (N, OC, OH, OW)
+        y = col2im_array(gcol, img_shape, (KH, KW), self.stride, self.pad,
+                         to_matrix=False)
+
+        if b is not None:
+            # b's shape is (OC,)
+            # since (OC,) cannot be broadcasted to (N, OC, OH, OW),
+            # need to respahe to (1, OC, 1, 1) first. Then 
+            # (1, OC, 1, 1) will be broadcasted to (N, OC, OH, OW)
+            y += b.reshape((1, b.size, 1, 1))
+
+        return y
+
+    def backward(self, gy):
+        """
+        Parameters
+        ----------
+        gy: baredl.Tensor (N, OC, OH, OW)
+            forward's output's grad.
+
+        Returns 
+        -------
+        gx: baredl.Tensor (N, C, H, Width)
+
+        gW: baredl.Tensor (C, OC, KH, KW)
+        
+        gb: baredl.Tensor (OC,)
+        """
+        x, W, b = self.inputs
+
+        gx = conv2d(gy, W, b=None, stride=self.stride, pad=self.pad)
+        gW = conv2d_grad_w(gy, x, self) # not (x, gy, self) but (gy, x, self)
+        gb = None
+
+        # note b (input) is stored as a Tensor even if it's None.
+        if b.data is not None:
+            gb = gy.sum(axis=(0, 2, 3))
+
+        return gx, gW, gb
+
+
+def conv_transpose2d(x, W, b=None, stride=1, pad=0, outsize=None):
+    return ConvTranspose2d(stride, pad, outsize)(x, W, b)
+
+        
+class Conv2dGradW(Function):
+    def __init__(self, conv2d):
+        W = conv2d.inputs[1]
+        KH, KW = W.shape[2:]
+        self.kernel_size = (KH, kW)
+        self.stride = conv2d.stride
+        self.pad = conv2d.pad
+
+    def forward(self, x, gy):
+        xp = get_array_module(x)
+
+        col = im2col_array(x, self.kernel_size, self.stride, self.pad, to_matrix=False)
+        gW = xp.tensordot(gy, col, ((0,2,3),(0,4,5)))
+        return gW
+
+    def backward(self, gys):
+        x, gy = self.inputs
+        gW, = self.outputs
+
+        XH, XW = x.shape[2:]
+        gx = conv_transpose2d(gy, gW, stride=self.stride, pad=self.pad,outsize=(XH, XW))
+        ggy = conv2d(x, gW, stride=self.stride, pad=self.pad)
+        return gx, ggy
+
+
+def conv2d_grad_w(x, gy, conv2d):
+    return Conv2dGradW(conv2d)(x, gy)
