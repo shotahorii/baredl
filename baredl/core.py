@@ -1,4 +1,5 @@
 import weakref
+from abc import ABCMeta, abstractmethod
 import numpy as np
 from baredl.config import Config, using_config
 
@@ -315,7 +316,7 @@ class Parameter(Tensor):
 # -------------------------------------------------------------
 
 
-class Function:
+class Function(metaclass=ABCMeta):
     """
     Base class of all functions defined in baredl, which operate/manipulate Tensor instances.
     Functions can take np.ndarray as a input but it will be converted into Tensor. 
@@ -383,13 +384,15 @@ class Function:
 
         return outputs if len(outputs) > 1 else outputs[0]
     
+    @abstractmethod
     def forward(self, x):
         """ x should be one or more of np.ndarray (input Tensor's data) """
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def backward(self, gy):
         """ gy should be one or more of Tensor (output Tensor's grad) """
-        raise NotImplementedError()
+        pass
 
 
 # -------------------------------------------------------------

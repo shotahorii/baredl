@@ -1,6 +1,5 @@
 import numpy as np
 from baredl.core import Tensor, Function, reverse_broadcast_to, get_array_module
-from baredl.config import Config
 from baredl.utils import logsumexp
 
 
@@ -249,23 +248,21 @@ class Dropout(Function):
     def __init__(self, dropout_ratio):
         self.dropout_ratio = dropout_ratio
 
-    def forward(self, x):
-        if Config.is_train:
+    def forward(self, x, training=True):
+        if training:
             xp = get_array_module(x)
             self.mask = xp.random.rand(*x.shape) > self.dropout_ratio
             self.scale = xp.array(1.0 - self.dropout_ratio).astype(x.dtype)
             y = x * self.mask / self.scale
             return y
         else:
+            self.mask, self.scale = 1.0, 1.0 # practically no need to do this though.
             return x
 
     def backward(self, gy):
-        if Config.is_train:
-            gx = gy * self.mask / self.scale
-            return gx
-        else:
-            return gy
+        gx = gy * self.mask / self.scale
+        return gx
 
 
-def dropout(x, dropout_ratio=0.5):
-    return Dropout(dropout_ratio)(x)
+def dropout(x, dropout_ratio=0.5, training=True):
+    return Dropout(dropout_ratio)(x, training)

@@ -9,6 +9,7 @@ import baredl.functions as F
 class Layer(metaclass=ABCMeta):
     def __init__(self):
         self._params = set()
+        self.training = True
 
     def __setattr__(self, name, value):
         if isinstance(value, (Parameter, Layer)):
@@ -34,6 +35,16 @@ class Layer(metaclass=ABCMeta):
                 yield from obj.parameters()
             else:
                 yield obj
+
+    def train(self, mode=True):
+        self.training = mode
+        for name in self._params:
+            obj = self.__dict__[name]
+            if isinstance(obj, Layer):
+                obj.train(mode)
+
+    def eval(self):
+        self.train(mode=False)
 
     def zero_grad(self):
         for param in self.parameters():
@@ -81,6 +92,25 @@ class Layer(metaclass=ABCMeta):
             param.data = npz[key]
 
 
+class Sequential(Layer):
+    def __init__(self, *layers):
+        if not layers:
+            raise ValueError('At least one layer needed.')
+        elif not all([isinstance(l, Layer) for l in layers]):
+            raise ValueError('Every input needs to be a Layer instance.')
+
+        super().__init__()
+        self.layers = []
+        for i, layer in enumerate(layers):
+            setattr(self, 'l'+str(i), layer)
+            self.layers.append(layer)
+            
+    def forward(self, x):  
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
+
 class Linear(Layer):
     def __init__(self, out_features, in_features=None, bias=True, dtype=np.float32):
         super().__init__()
@@ -108,4 +138,14 @@ class Linear(Layer):
             self._init_W(xp)
         
         y = F.linear(x, self.W, self.b)
+        return y
+
+
+class Dropout(Layer):
+    def __init__(self, p=0.5):
+        super().__init__()
+        self.p = p
+
+    def forward(self, x):
+        y = F.dropout(x, dropout_ratio=self.p, training=self.training)
         return y

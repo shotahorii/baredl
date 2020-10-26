@@ -1,29 +1,36 @@
 from abc import ABCMeta, abstractmethod
-from bareml.core import get_array_module
-
+from baredl.core import get_array_module
+from baredl.layers import Layer
 
 class Optimiser(metaclass=ABCMeta):
-    def __init__(self):
-        self.target = None
-        self.hooks = []
+    """
+    Base class for optimisers.
 
-    def setup(self, target):
-        self.target = target
-        return self
+    Parameters
+    ----------
+    params: Layer (or Model), array-like, or generator
+        List of parameters to be optimised via the optimiser.
+    """
+    def __init__(self, params):
+        if isinstance(params, Layer):
+            params = params.parameters()
+        self.params = [p for p in params]
+        self.hooks = []
 
     def step(self):
         # list parameters containing not None grad
-        params = [p for p in self.target.params() if p.grad is not None]
+        params_to_update = [p for p in self.params if p.grad is not None]
 
         # preprocess (optional)
         for f in self.hooks:
-            f(params)
+            f(params_to_update)
 
-        for p in params:
+        for p in params_to_update:
             self.update_one(p)
 
     def zero_grad(self):
-        self.target.zero_grad()
+        for param in self.params:
+            param.cleargrad()
 
     @abstractmethod
     def update_one(param):
@@ -34,8 +41,8 @@ class Optimiser(metaclass=ABCMeta):
 
 
 class SGD(Optimiser):
-    def __init__(self, lr=0.01):
-        super().__init__()
+    def __init__(self, params, lr=0.01):
+        super().__init__(params)
         self.lr = lr
 
     def update_one(self, param):
@@ -43,8 +50,8 @@ class SGD(Optimiser):
 
 
 class MomentumSGD(Optimiser):
-    def __init__(self, lr=0.01, momentum=0.9):
-        super().__init__()
+    def __init__(self, params, lr=0.01, momentum=0.9):
+        super().__init__(params)
         self.lr = lr
         self.momentum = momentum
         self.vs = {}
