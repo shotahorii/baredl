@@ -1,5 +1,5 @@
-import .functions as F
-import .layers as L
+import functions as F
+import layers as L
 
 
 class Model(L.Layer):
