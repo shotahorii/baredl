@@ -1,5 +1,5 @@
-import functions as F
-import layers as L
+import baredl.functions as F
+import baredl.layers as L
 
 
 class Model(L.Layer):

@@ -3,7 +3,7 @@ import weakref
 from abc import ABCMeta, abstractmethod
 import numpy as np
 from .core import Parameter, get_array_module
-import functions as F
+import baredl.functions as F
 from .utils import pair
 
 
