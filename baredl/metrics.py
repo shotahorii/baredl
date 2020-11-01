@@ -1,5 +1,5 @@
 import numpy as np
-from baredl.core import Tensor, as_tensor, as_array
+from .core import Tensor, as_tensor, as_array
 
 def accuracy(y, t):
     """

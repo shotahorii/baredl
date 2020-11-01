@@ -1,6 +1,6 @@
 import numpy as np
-from baredl.core import Tensor, Function, reverse_broadcast_to, get_array_module
-from baredl.utils import logsumexp, pair, im2col_array, col2im_array, get_deconv_outsize
+from .core import Tensor, Function, reverse_broadcast_to, get_array_module
+from .utils import logsumexp, pair, im2col_array, col2im_array, get_deconv_outsize
 
 
 # -------------------------------------------------------------

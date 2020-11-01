@@ -1,7 +1,7 @@
 import weakref
 from abc import ABCMeta, abstractmethod
 import numpy as np
-from baredl.config import Config, using_config
+from .config import Config, using_config
 
 try:
     import cupy as cp

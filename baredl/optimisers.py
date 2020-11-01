@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod
-from baredl.core import get_array_module
-from baredl.layers import Layer
+from .core import get_array_module
+from .layers import Layer
 
 class Optimiser(metaclass=ABCMeta):
     """

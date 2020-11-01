@@ -3,7 +3,7 @@ Helper functions.
 """
 
 import numpy as np
-from baredl.core import Tensor, get_array_module, cupy
+from .core import Tensor, get_array_module, cupy
 
 # -------------------------------------------------------------
 # General helper functions: logsumexp, pair

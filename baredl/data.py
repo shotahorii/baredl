@@ -1,7 +1,7 @@
 from abc import ABCMeta, abstractmethod
 import math
 import numpy as np
-from baredl.core import cupy
+from .core import cupy
 
 class Dataset(metaclass=ABCMeta):
 

@@ -2,9 +2,9 @@ import os
 import weakref
 from abc import ABCMeta, abstractmethod
 import numpy as np
-from baredl.core import Parameter, get_array_module
-import baredl.functions as F
-from baredl.utils import pair
+from .core import Parameter, get_array_module
+import .functions as F
+from .utils import pair
 
 
 class Layer(metaclass=ABCMeta):
