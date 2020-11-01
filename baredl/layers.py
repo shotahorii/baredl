@@ -94,6 +94,30 @@ class Layer(metaclass=ABCMeta):
 
 
 # -------------------------------------------------------------
+# Sequential
+# -------------------------------------------------------------
+
+
+class Sequential(Layer):
+    def __init__(self, *layers):
+        if not layers:
+            raise ValueError('At least one layer needed.')
+        elif not all([isinstance(l, Layer) for l in layers]):
+            raise ValueError('Every input needs to be a Layer instance.')
+
+        super().__init__()
+        self.layers = []
+        for i, layer in enumerate(layers):
+            setattr(self, 'l'+str(i), layer)
+            self.layers.append(layer)
+            
+    def forward(self, x):  
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
+
+# -------------------------------------------------------------
 # Linear / Dropout
 # -------------------------------------------------------------
 
@@ -139,18 +163,38 @@ class Dropout(Layer):
 
 
 # -------------------------------------------------------------
+# Activation
+# -------------------------------------------------------------
+
+
+class ReLU(Layer):
+    def forward(self, x):
+        y = F.relu(x)
+        return x
+
+
+class LeakyReLU(Layer):
+    def __init__(self, slope=0.2):
+        self.slope = slope
+
+    def forward(self, x):
+        y = F.leaky_relu(x, self.slope)
+        return y
+
+
+# -------------------------------------------------------------
 # Conv2d / ConvTranspose2d
 # -------------------------------------------------------------
 
 
 class Conv2d(Layer):
-    def __init__(self, out_channels, kernel_size, stride=1, pad=0, bias=True, dtype=np.float32, in_channels=None):
+    def __init__(self, out_channels, kernel_size, stride=1, padding=0, bias=True, dtype=np.float32, in_channels=None):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.kernel_size = kernel_size
         self.stride = stride
-        self.pad = pad
+        self.pad = padding
         self.dtype = dtype
 
         self.W = Parameter(None, name='W')
@@ -180,13 +224,13 @@ class Conv2d(Layer):
 
 
 class ConvTranspose2d(Layer):
-    def __init__(self, out_channels, kernel_size, stride=1, pad=0, bias=True, dtype=np.float32, in_channels=None):
+    def __init__(self, out_channels, kernel_size, stride=1, padding=0, bias=True, dtype=np.float32, in_channels=None):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.kernel_size = kernel_size
         self.stride = stride
-        self.pad = pad 
+        self.pad = padding
         self.dtype = dtype
 
         self.W = Parameter(None, name='W')
@@ -215,3 +259,17 @@ class ConvTranspose2d(Layer):
         return y
 
 
+# -------------------------------------------------------------
+# MaxPool2d
+# -------------------------------------------------------------
+
+
+class MaxPool2d(Layer):
+    def __init__(self, kernel_size, stride=1, padding=0):
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.pad = padding
+
+    def forward(self, x):
+        y = F.max_pool2d(x, self.kernel_size, self.stride, self.pad)
+        return y

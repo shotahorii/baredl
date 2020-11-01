@@ -293,10 +293,10 @@ def dropout(x, dropout_ratio=0.5, training=True):
 
 class Conv2d(Function):
 
-    def __init__(self, stride=1, pad=0):
+    def __init__(self, stride=1, padding=0):
         super().__init__()
         self.stride = pair(stride)
-        self.pad = pair(pad)
+        self.pad = pair(padding)
 
     def forward(self, x, W, b):
         """
@@ -435,8 +435,8 @@ class Conv2d(Function):
 
         H, Width = x.shape[2], x.shape[3]
         
-        gx = conv_transpose2d(gy, W, b=None, stride=self.stride, pad=self.pad, outsize=(H, Width))
-        gW = conv2d_grad_w(x, gy, self)
+        gx = conv_transpose2d(gy, W, b=None, stride=self.stride, padding=self.pad, outsize=(H, Width))
+        gW = Conv2dGradW(self)(x, gy)
         gb = None
 
         # note b (input) is stored as a Tensor even if it's None.
@@ -446,16 +446,16 @@ class Conv2d(Function):
         return gx, gW, gb
 
 
-def conv2d(x, W, b=None, stride=1, pad=0):
-    return Conv2d(stride, pad)(x, W, b)
+def conv2d(x, W, b=None, stride=1, padding=0):
+    return Conv2d(stride, padding)(x, W, b)
 
 
 class ConvTranspose2d(Function):
     
-    def __init__(self, stride=1, pad=0, outsize=None):
+    def __init__(self, stride=1, padding=0, outsize=None):
         super().__init__()
         self.stride = pair(stride)
-        self.pad = pair(pad)
+        self.pad = pair(padding)
         self.outsize = outsize
 
     def forward(self, x, W, b):
@@ -545,8 +545,8 @@ class ConvTranspose2d(Function):
         """
         x, W, b = self.inputs
 
-        gx = conv2d(gy, W, b=None, stride=self.stride, pad=self.pad)
-        gW = conv2d_grad_w(gy, x, self) # not (x, gy, self) but (gy, x, self)
+        gx = conv2d(gy, W, b=None, stride=self.stride, padding=self.pad)
+        gW = Conv2dGradW(self)(gy, x) # not (x, gy, self) but (gy, x, self)
         gb = None
 
         # note b (input) is stored as a Tensor even if it's None.
@@ -556,8 +556,8 @@ class ConvTranspose2d(Function):
         return gx, gW, gb
 
 
-def conv_transpose2d(x, W, b=None, stride=1, pad=0, outsize=None):
-    return ConvTranspose2d(stride, pad, outsize)(x, W, b)
+def conv_transpose2d(x, W, b=None, stride=1, padding=0, outsize=None):
+    return ConvTranspose2d(stride, padding, outsize)(x, W, b)
 
         
 class Conv2dGradW(Function):
@@ -580,10 +580,94 @@ class Conv2dGradW(Function):
         gW, = self.outputs
 
         XH, XW = x.shape[2:]
-        gx = conv_transpose2d(gy, gW, stride=self.stride, pad=self.pad,outsize=(XH, XW))
+        gx = conv_transpose2d(gy, gW, stride=self.stride, padding=self.pad,outsize=(XH, XW))
         ggy = conv2d(x, gW, stride=self.stride, pad=self.pad)
         return gx, ggy
 
 
-def conv2d_grad_w(x, gy, conv2d):
-    return Conv2dGradW(conv2d)(x, gy)
+# -------------------------------------------------------------
+# Pooling functions: 
+# -------------------------------------------------------------
+
+
+class MaxPool2d(Function):
+    def __init__(self, kernel_size, stride=1, padding=0):
+        super().__init__()
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.pad = padding
+
+    def forward(self, x):
+        col = im2col_array(x, self.kernel_size, self.stride, self.pad, to_matrix=False)
+
+        N, C, KH, KW, OH, OW = col.shape
+        col = col.reshape(N, C, KH * KW, OH, OW)
+        y = col.max(axis=2)
+        self.indices = col.argmax(axis=2)
+
+        return y
+
+    def backward(self, gy):
+        return MaxPool2dGrad(self)(gy)
+
+
+def max_pool2d(x, kernel_size, stride=1, padding=0):
+    return MaxPool2d(kernel_size, stride, padding)(x)
+
+
+class MaxPool2dGrad(Function):
+    def __init__(self, maxpool2d):
+        self.maxpool2d = maxpool2d
+        self.kernel_size = maxpool2d.kernel_size
+        self.stride = maxpool2d.stride
+        self.pad = maxpool2d.pad
+        self.input_shape = maxpool2d.inputs[0].shape
+        self.dtype = maxpool2d.inputs[0].dtype
+        self.indices = maxpool2d.indices
+
+    def forward(self, gy):
+        xp = get_array_module(gy)
+
+        N, C, OH, OW = gy.shape
+        N, C, H, W = self.input_shape
+        KH, KW = pair(self.kernel_size)
+
+        gcol = xp.zeros((N * C * OH * OW * KH * KW), dtype=self.dtype)
+
+        indices = (self.indices.ravel() + xp.arange(0, self.indices.size * KH * KW, KH * KW))
+
+        gcol[indices] = gy.ravel()
+        gcol = gcol.reshape(N, C, OH, OW, KH, KW)
+        gcol = xp.swapaxes(gcol, 2, 4)
+        gcol = xp.swapaxes(gcol, 3, 5)
+
+        gx = col2im_array(gcol, (N, C, H, W), self.kernel_size, self.stride, self.pad, to_matrix=False)
+
+        return gx
+
+    def backward(self, ggx):
+        f = MaxPool2dWithIndices(self.maxpool2d)
+        return f(ggx)
+
+
+class MaxPool2dWithIndices(Function):
+
+    def __init__(self, maxpool2d):
+        self.kernel_size = maxpool2d.kernel_size
+        self.stride = maxpool2d.stride
+        self.pad = maxpool2d.pad
+        self.input_shape = maxpool2d.inputs[0].shape
+        self.dtype = maxpool2d.inputs[0].dtype
+        self.indices = maxpool2d.indices
+
+    def forward(self, x):
+        col = im2col_array(x, self.kernel_size, self.stride, self.pad, to_matrix=False)
+        N, C, KH, KW, OH, OW = col.shape
+        col = col.reshape(N, C, KH * KW, OH, OW)
+        col = col.transpose(0, 1, 3, 4, 2).reshape(-1, KH * KW)
+        indices = self.indices.ravel()
+        col = col[np.arange(len(indices)), indices]
+        return col.reshape(N, C, OH, OW)
+
+
+        
