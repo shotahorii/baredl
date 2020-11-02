@@ -17,8 +17,14 @@ class Dataset(metaclass=ABCMeta):
 
     def __init__(self, train=True, transform=None, target_trainform=None):
         self.train = train
-        self.transform = lambda x:x if transform is None else transform
-        self.target_transform = lambda x:x if target_trainform is None else target_trainform
+
+        self.transform = transform 
+        self.target_transform = target_trainform
+        if self.transform is None:
+            self.transform = lambda x:x
+        if self.target_transform is None:
+            self.target_transform = lambda x:x
+
         self.data = None
         self.label = None
         self.prepare()
@@ -102,8 +108,7 @@ class DataLoader:
 class MNIST(Dataset):
 
     def __init__(self, train=True,
-                 transform=Compose([Flatten(), ToFloat(),
-                                     Normalise(0., 255.)]),
+                 transform=Compose([Flatten(), ToFloat(), Normalise(0., 255.)]),
                  target_transform=None):
         super().__init__(train, transform, target_transform)
 
