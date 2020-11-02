@@ -4,7 +4,7 @@ import math
 import numpy as np
 from .core import cupy
 from .utils import get_file
-from .transforms import Flatten, ToFloat, Normalise
+from .transforms import Compose, Flatten, ToFloat, Normalise
 
 # matplotlib is not in dependency list
 try:
