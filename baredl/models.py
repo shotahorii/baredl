@@ -26,6 +26,7 @@ class MLP(Model):
 class VGG16(Model):
     """ VGG16 net """
     def __init__(self, in_channels=3, num_classes=1000):
+        super().__init__()
         features = L.Sequential(
             L.Conv2d(in_channels=in_channels, out_channels=64, kernel_size=(3,3), stride=(1,1), padding=(1,1)),
             L.ReLU(),
