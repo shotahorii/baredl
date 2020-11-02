@@ -74,9 +74,9 @@ class DataLoader:
         batch_index = self.index[i*batch_size : (i+1)*batch_size]
         batch = [self.dataset[i] for i in batch_index]
 
-        if self.gpu and baredl.core.cupy is None:
+        if self.gpu and cupy is None:
             raise Exception('CuPy not loaded.')
-        xp = baredl.core.cupy if self.gpu else np
+        xp = cupy if self.gpu else np
         x = xp.array([e[0] for e in batch])
         t = xp.array([e[1] for e in batch])
 
