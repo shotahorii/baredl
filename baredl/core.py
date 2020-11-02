@@ -304,7 +304,14 @@ class Tensor:
     def to_gpu(self):
         if self.data is not None:
             self.data = as_cupy(self.data)
-    
+
+    def to(self, device):
+        if device=='cpu':
+            self.to_cpu()
+        elif device=='cuda':
+            self.to_gpu()
+        else:
+            raise ValueError('device can be either "cpu" or "cuda".')    
 
 
 class Parameter(Tensor):

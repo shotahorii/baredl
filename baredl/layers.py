@@ -59,6 +59,14 @@ class Layer(metaclass=ABCMeta):
         for param in self.parameters():
             param.to_gpu()
 
+    def to(self, device):
+        if device=='cpu':
+            self.to_cpu()
+        elif device=='cuda':
+            self.to_gpu()
+        else:
+            raise ValueError('device can be either "cpu" or "cuda".')  
+
     def _flatten_params(self, params_dict, parent_key=''):
         for name in self._params:
             obj = self.__dict__[name]
