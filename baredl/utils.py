@@ -16,8 +16,19 @@ from .core import Tensor, get_array_module, cupy
 
 def logsumexp(x, axis=1):
     """
-    Helper function for Softmax.
     https://blog.feedly.com/tricks-of-the-trade-logsumexp/
+
+    Parameters
+    ----------
+    x: np.ndarray (n, c)
+        n: number of samples
+        c: number of classes
+
+    axis: int
+
+    Returns
+    -------
+    m: np.ndarray (n,1)
     """
     m = x.max(axis=axis, keepdims=True)
     y = x - m

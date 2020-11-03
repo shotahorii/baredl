@@ -67,6 +67,8 @@ class Layer(metaclass=ABCMeta):
         else:
             raise ValueError('device can be either "cpu" or "cuda".')  
 
+        return self
+
     def _flatten_params(self, params_dict, parent_key=''):
         for name in self._params:
             obj = self.__dict__[name]

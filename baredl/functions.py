@@ -152,6 +152,28 @@ def softmax(x, axis=1):
     return Softmax(axis)(x)
 
 
+class LogSoftmax(Function):
+    def __init__(self, axis=1):
+        self.axis=axis
+
+    def forward(self, x):
+        """
+        https://blog.feedly.com/tricks-of-the-trade-logsumexp/
+        """
+        log_z = logsumexp(x, self.axis)
+        y = x - log_z
+        return y
+
+    def backward(self, gy):
+        y = self.outputs[0]() #weakref
+        gx = gy - exp(y) * gy.sum(axis=self.axis, keepdims=True)
+        return gx
+
+
+def log_softmax(x, axis=1):
+    return LogSoftmax(axis)(x)
+
+
 class ReLU(Function):
     def forward(self, x):
         xp = get_array_module(x)
@@ -191,11 +213,11 @@ def leaky_relu(x, slope=0.2):
 
 
 # -------------------------------------------------------------
-# Loss functions: mean_squared_error
+# Loss functions: MSELoss, CrossEntropyLoss
 # -------------------------------------------------------------
 
 
-class MeanSquaredError(Function):
+class MSELoss(Function):
     def forward(self, x0, x1):
         diff = x0 - x1
         y = (diff ** 2) / len(diff)
@@ -209,16 +231,39 @@ class MeanSquaredError(Function):
         return gx0, gx1
 
 
-def mean_squared_error(x0, x1):
-    return MeanSquaredError()(x0, x1)
+def mse_loss(x0, x1):
+    return MSELoss()(x0, x1)
 
 
-class SoftmaxCrossEntropy(Function):
+class CrossEntropyLoss(Function):
+    """
+    Cross Entropy Loss of Softmax.
+    """
     def forward(self, x, t):
+        """
+        Parameters
+        ----------
+        x: np.ndarray (n, c)
+            n: number of samples
+            c: number of classes
+
+        t: np.ndarray (n,) or (n,1)
+            n: number of samples
+            label index of true class of each sample
+            
+        Returns
+        -------
+        y: np.scalar
+        """
         N = x.shape[0]
         log_z = logsumexp(x, axis=1)
-        log_p = x - log_z
+        log_p = x - log_z # log softmax
+        # for each sample, get only prob of the true label.
+        # e.g. if log_p = [[-1.4, -2.4, -0.4], [-3.2, -2.2, -0.2]]
+        #      and t = [0,1]
+        #      then log_p[np.arange(N), t.ravel()] = [-1.4, -2.2]
         log_p = log_p[np.arange(N), t.ravel()]
+        # get average
         y = -log_p.sum() / np.float32(N)
         return y
 
@@ -234,8 +279,48 @@ class SoftmaxCrossEntropy(Function):
         return y
 
 
-def softmax_cross_entropy(x, t):
-    return SoftmaxCrossEntropy()(x, t)
+def cross_entropy(x, t):
+    return CrossEntropyLoss()(x, t)
+
+
+class NLLLoss(Function):
+    """
+    NLL Loss
+    """
+    def forward(self, x, t):
+        """
+        Parameters
+        ----------
+        x: np.ndarray (n, c)
+            n: number of samples
+            c: number of classes
+
+        t: np.ndarray (n,) or (n,1)
+            n: number of samples
+            label index of true class of each sample
+            
+        Returns
+        -------
+        y: np.scalar
+        """
+        N = x.shape[0]
+        log_p = x[np.arange(N), t.ravel()]
+        y = -log_p.sum() / np.float32(N)
+        return y
+
+    def backward(self, gy):
+        x, t = self.inputs 
+        N, CLS_NUM = x.shape
+
+        gy *= 1/N
+        xp = get_array_module(t.data)
+        t_onehot = xp.eye(CLS_NUM, dtype=t.dtype)[t.data]
+        y = (x - t_onehot) * gy
+        return y
+
+    
+def nll_loss(x, t):
+    return NLLLoss()(x, t)
 
 
 # -------------------------------------------------------------

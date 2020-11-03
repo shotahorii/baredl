@@ -311,7 +311,9 @@ class Tensor:
         elif device=='cuda':
             self.to_gpu()
         else:
-            raise ValueError('device can be either "cpu" or "cuda".')    
+            raise ValueError('device can be either "cpu" or "cuda".') 
+
+        return self
 
 
 class Parameter(Tensor):
@@ -506,7 +508,7 @@ class Div(Function):
 
     def backward(self, gy):
         x0, x1 = self.inputs
-        gx0 = gy / x0
+        gx0 = gy / x1
         gx1 = gy * (- x0 / (x1 ** 2))
         if x0.shape != x1.shape:
             gx0 = reverse_broadcast_to(gx0, x0.shape)

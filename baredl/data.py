@@ -100,6 +100,8 @@ class DataLoader:
         else:
             raise ValueError('device can be either "cpu" or "cuda".') 
 
+        return self
+
 
 # -------------------------------------------------------------
 # Datasets: MNIST
