@@ -650,7 +650,7 @@ class Conv2dGradW(Function):
     def __init__(self, conv2d):
         W = conv2d.inputs[1]
         KH, KW = W.shape[2:]
-        self.kernel_size = (KH, kW)
+        self.kernel_size = (KH, KW)
         self.stride = conv2d.stride
         self.pad = conv2d.pad
 
