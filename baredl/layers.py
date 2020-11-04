@@ -5,6 +5,7 @@ import numpy as np
 from .core import Parameter, get_array_module
 import baredl.functions as F
 from .utils import pair
+from .config import Config
 
 
 class Layer(metaclass=ABCMeta):
@@ -39,6 +40,7 @@ class Layer(metaclass=ABCMeta):
 
     def train(self, mode=True):
         self.training = mode
+        Config.training = mode
         for name in self._params:
             obj = self.__dict__[name]
             if isinstance(obj, Layer):
@@ -168,7 +170,7 @@ class Dropout(Layer):
         self.p = p
 
     def forward(self, x):
-        y = F.dropout(x, dropout_ratio=self.p, training=self.training)
+        y = F.dropout(x, dropout_ratio=self.p)
         return y
 
 

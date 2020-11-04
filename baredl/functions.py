@@ -1,6 +1,7 @@
 import numpy as np
 from .core import Tensor, Function, reverse_broadcast_to, get_array_module
 from .utils import logsumexp, pair, im2col_array, col2im_array, get_deconv_outsize
+from .config import Config
 
 
 # -------------------------------------------------------------
@@ -351,8 +352,8 @@ class Dropout(Function):
     def __init__(self, dropout_ratio):
         self.dropout_ratio = dropout_ratio
 
-    def forward(self, x, training=True):
-        if training:
+    def forward(self, x):
+        if Config.training:
             xp = get_array_module(x)
             self.mask = xp.random.rand(*x.shape) > self.dropout_ratio
             self.scale = xp.array(1.0 - self.dropout_ratio).astype(x.dtype)
@@ -367,8 +368,8 @@ class Dropout(Function):
         return gx
 
 
-def dropout(x, dropout_ratio=0.5, training=True):
-    return Dropout(dropout_ratio)(x, training)
+def dropout(x, dropout_ratio=0.5):
+    return Dropout(dropout_ratio)(x)
 
 
 # -------------------------------------------------------------

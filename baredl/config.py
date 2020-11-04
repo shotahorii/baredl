@@ -3,6 +3,7 @@ import contextlib
 
 class Config:
     enable_backprop = True
+    training = True
 
 
 @contextlib.contextmanager
