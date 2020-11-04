@@ -284,46 +284,6 @@ def cross_entropy(x, t):
     return CrossEntropyLoss()(x, t)
 
 
-class NLLLoss(Function):
-    """
-    NLL Loss
-    """
-    def forward(self, x, t):
-        """
-        Parameters
-        ----------
-        x: np.ndarray (n, c)
-            n: number of samples
-            c: number of classes
-
-        t: np.ndarray (n,) or (n,1)
-            n: number of samples
-            label index of true class of each sample
-            
-        Returns
-        -------
-        y: np.scalar
-        """
-        N = x.shape[0]
-        log_p = x[np.arange(N), t.ravel()]
-        y = -log_p.sum() / np.float32(N)
-        return y
-
-    def backward(self, gy):
-        x, t = self.inputs 
-        N, CLS_NUM = x.shape
-
-        gy *= 1/N
-        xp = get_array_module(t.data)
-        t_onehot = xp.eye(CLS_NUM, dtype=t.dtype)[t.data]
-        y = (x - t_onehot) * gy
-        return y
-
-    
-def nll_loss(x, t):
-    return NLLLoss()(x, t)
-
-
 # -------------------------------------------------------------
 # Other functions: linear, dropout
 # -------------------------------------------------------------

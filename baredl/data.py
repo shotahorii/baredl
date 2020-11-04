@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 import gzip
 import math
 import numpy as np
-from .core import cupy
+from .core import cupy, as_tensor
 from .utils import get_file
 from .transforms import Compose, Flatten, ToFloat, Normalise
 
@@ -81,7 +81,7 @@ class DataLoader:
         t = xp.array([e[1] for e in batch])
 
         self.iteration += 1
-        return x, t
+        return as_tensor(x), as_tensor(t)
 
     def next(self):
         return self.__next__()
