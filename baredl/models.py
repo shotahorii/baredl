@@ -2,11 +2,7 @@ import baredl.functions as F
 import baredl.layers as L
 
 
-class Model(L.Layer):
-    pass
-
-
-class MLP(Model):
+class MLP(L.Module):
     def __init__(self, fc_output_sizes, activation=F.sigmoid):
         super().__init__()
         self.activation = activation
@@ -23,7 +19,7 @@ class MLP(Model):
         return self.layers[-1](x)
 
 
-class VGG16(Model):
+class VGG16(L.Module):
     """ VGG16 net """
     def __init__(self, in_channels=3, num_classes=1000):
         super().__init__()

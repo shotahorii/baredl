@@ -8,10 +8,14 @@ from .utils import pair
 from .config import Config
 
 
+# -------------------------------------------------------------
+# Base class for all layers
+# -------------------------------------------------------------
+
+
 class Layer(metaclass=ABCMeta):
     def __init__(self):
         self._params = set()
-        self.training = True
 
     def __setattr__(self, name, value):
         if isinstance(value, (Parameter, Layer)):
@@ -39,12 +43,7 @@ class Layer(metaclass=ABCMeta):
                 yield obj
 
     def train(self, mode=True):
-        self.training = mode
         Config.training = mode
-        for name in self._params:
-            obj = self.__dict__[name]
-            if isinstance(obj, Layer):
-                obj.train(mode)
 
     def eval(self):
         self.train(mode=False)
@@ -103,6 +102,15 @@ class Layer(metaclass=ABCMeta):
         self._flatten_params(params_dict)
         for key, param in params_dict.items():
             param.data = npz[key]
+
+
+# -------------------------------------------------------------
+# Base class for models
+# -------------------------------------------------------------
+
+
+class Module(Layer):
+    pass
 
 
 # -------------------------------------------------------------
