@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 import gzip
 import math
 import numpy as np
-from .core import cupy, as_tensor
+from .core import cupy, as_tensor, Tensor
 from .utils import get_file
 from .transforms import Compose, Flatten, ToFloat, Normalise
 
@@ -83,7 +83,7 @@ class DataLoader:
 
         self.iteration += 1
         return as_tensor(x), as_tensor(t)
-    """
+    
 
     def __next__(self):
         if self.iteration >= self.max_iter:
@@ -96,6 +96,31 @@ class DataLoader:
 
         self.iteration += 1
         return batch_x, batch_t
+    """
+
+    def __next__(self):
+        if self.iteration >= self.max_iter:
+            self.reset()
+            raise StopIteration
+
+        i, batch_size = self.iteration, self.batch_size
+        batch_index = self.index[i*batch_size : (i+1)*batch_size]
+        batch = [self.dataset[i] for i in batch_index]
+
+        if self.gpu and cupy is None:
+            raise Exception('CuPy not loaded.')
+        xp = cupy if self.gpu else np
+        x = xp.array([e[0] for e in batch])
+        t = xp.array([e[1] for e in batch])
+
+        if isinstance(batch[0][0],Tensor):
+            x = as_tensor(x)
+
+        if isinstance(batch[0][1],Tensor):
+            t = as_tensor(t)
+
+        self.iteration += 1
+        return x, t
 
 
     def next(self):
