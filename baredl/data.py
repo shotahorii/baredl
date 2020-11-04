@@ -65,6 +65,7 @@ class DataLoader:
     def __iter__(self):
         return self
     
+    """
     def __next__(self):
         if self.iteration >= self.max_iter:
             self.reset()
@@ -82,6 +83,20 @@ class DataLoader:
 
         self.iteration += 1
         return as_tensor(x), as_tensor(t)
+    """
+
+    def __next__(self):
+        if self.iteration >= self.max_iter:
+            self.reset()
+            raise StopIteration
+
+        i, batch_size = self.iteration, self.batch_size
+        batch_index = self.index[i*batch_size : (i+1)*batch_size]
+        batch_x, batch_t = self.dataset[batch_index]
+
+        self.iteration += 1
+        return batch_x, batch_t
+
 
     def next(self):
         return self.__next__()

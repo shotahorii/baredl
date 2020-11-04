@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
 import numpy as np
+from .core import as_tensor
 
 class Compose:
     """ 
@@ -64,7 +65,12 @@ class ToFloat(AsType):
         self.dtype = np.float32
 
 
-class Normalise:
+class ToTensor(Transform):
+    def __call__(self, array):
+        return as_tensor(array)
+
+
+class Normalise(Transform):
     """Normalize a NumPy array with mean and standard deviation.
     Args:
         mean (float or sequence): mean for all values or sequence of means for

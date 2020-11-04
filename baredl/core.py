@@ -184,6 +184,10 @@ class Tensor:
     def T(self):
         return transpose(self)
 
+    def astype(self, dtype):
+        self.data.dtype = dtype
+        return self
+
     def flatten(self):
         return flatten(self)
 
