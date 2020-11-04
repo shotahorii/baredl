@@ -265,7 +265,8 @@ class CrossEntropyLoss(Function):
         #      then log_p[np.arange(N), t.ravel()] = [-1.4, -2.2]
         log_p = log_p[np.arange(N), t.ravel()]
         # get average
-        y = -log_p.sum() / np.float32(N)
+        #y = -log_p.sum() / xp.float32(N)
+        y = -log_p.sum() / (1.0 * N)
         return y
 
     def backward(self, gy):
