@@ -64,9 +64,6 @@ def as_cupy(x):
     if isinstance(x, Tensor):
         x = x.data
 
-    print('===test===')
-    print(x)
-
     if cupy is None:
         raise Exception('CuPy not loaded.')
     return cp.asarray(x)

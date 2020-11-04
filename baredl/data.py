@@ -83,7 +83,7 @@ class DataLoader:
 
         self.iteration += 1
         return as_tensor(x), as_tensor(t)
-    
+    """
 
     def __next__(self):
         if self.iteration >= self.max_iter:
@@ -96,8 +96,9 @@ class DataLoader:
 
         self.iteration += 1
         return batch_x, batch_t
-    """
+    
 
+    """
     def __next__(self):
         if self.iteration >= self.max_iter:
             self.reset()
@@ -121,7 +122,7 @@ class DataLoader:
 
         self.iteration += 1
         return x, t
-
+    """
 
     def next(self):
         return self.__next__()
