@@ -342,6 +342,34 @@ def dropout(x, dropout_ratio=0.5):
     return Dropout(dropout_ratio)(x)
 
 
+class Dropout2d(Function):
+    def __init__(self, dropout_ratio):
+        self.dropout_ratio = dropout_ratio
+
+    def forward(self, x):
+        if Config.training:
+            xp = get_array_module(x)
+
+            channels_removed = xp.random.rand(x.shape[1]) <= self.dropout_ratio
+            self.mask = xp.ones(x.shape)
+            self.mask[:,channels_removed] = 0.0
+            self.scale = xp.array(1.0 - channels_removed.sum()/len(channels_removed)).astype(x.dtype)
+
+            y = x * self.mask / self.scale
+            return y
+        else:
+            self.mask, self.scale = 1.0, 1.0 # practically no need to do this though.
+            return x
+
+    def backward(self, gy):
+        gx = gy * self.mask / self.scale
+        return gx
+
+
+def dropout2d(x, dropout_ratio=0.5):
+    return Dropout2d(dropout_ratio)(x)
+
+
 # -------------------------------------------------------------
 # Conv functions: 
 # -------------------------------------------------------------

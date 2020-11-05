@@ -184,6 +184,16 @@ class Dropout(Layer):
         return y
 
 
+class Dropout2d(Layer):
+    def __init__(self, p=0.5):
+        super().__init__()
+        self.p = p
+
+    def forward(self, x):
+        y = F.dropout2d(x, dropout_ratio=self.p)
+        return y
+
+
 class Flatten(Layer):
     def forward(self, x):
         y = flatten(x)
