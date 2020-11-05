@@ -906,7 +906,7 @@ def matmul(x, W):
 
 
 # -------------------------------------------------------------
-# max / min
+# max / min / clip
 # -------------------------------------------------------------
 
 
@@ -983,3 +983,24 @@ def max(x, axis=None, keepdims=False):
 
 def min(x, axis=None, keepdims=False):
     return Min(axis, keepdims)(x)
+
+
+class Clip(Function):
+    def __init__(self, x_min, x_max):
+        self.x_min = x_min
+        self.x_max = x_max
+
+    def forward(self, x):
+        xp = get_array_module(x)
+        y = xp.clip(x, self.x_min, self.x_max)
+        return y
+
+    def backward(self, gy):
+        x, = self.inputs
+        mask = (x.data >= self.x_min) * (x.data <= self.x_max)
+        gx = gy * mask
+        return gx
+
+
+def clip(x, x_min, x_max):
+    return Clip(x_min, x_max)(x)

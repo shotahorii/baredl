@@ -1,5 +1,5 @@
 import numpy as np
-from .core import Tensor, Function, reverse_broadcast_to, get_array_module
+from .core import Tensor, Function, reverse_broadcast_to, get_array_module, sum, clip
 from .utils import logsumexp, pair, im2col_array, col2im_array, get_deconv_outsize
 from .config import Config
 
@@ -282,6 +282,16 @@ class CrossEntropyLoss(Function):
 
 def cross_entropy(x, t):
     return CrossEntropyLoss()(x, t)
+
+
+def binary_cross_entropy(p, t):
+    if p.ndim != t.ndim:
+        t = t.reshape(*p.shape)
+    N = len(t)
+    p = clip(p, 1e-15, 0.999)
+    tlog_p = t * log(p) + (1 - t) * log(1 - p)
+    y = -1 * sum(tlog_p) / N
+    return y
 
 
 # -------------------------------------------------------------
