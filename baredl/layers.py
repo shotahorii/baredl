@@ -343,8 +343,9 @@ class MaxPool2d(Layer):
 
 
 class BatchNorm2d(Layer):
-    def __init__(self):
+    def __init__(self, num_features=None):
         super().__init__()
+        self.num_features = num_features
         # `.avg_mean` and `.avg_var` are `Parameter` objects, so they will be
         # saved to a file (using `save_weights()`).
         # But they don't need grads, so they're just used as `ndarray`.
@@ -355,7 +356,9 @@ class BatchNorm2d(Layer):
 
     def _init_params(self, x):
         xp = get_array_module(x)
-        D = x.shape[1]
+
+        D = x.shape[1] if self.num_features is None else self.num_features
+
         if self.avg_mean.data is None:
             self.avg_mean.data = xp.zeros(D, dtype=x.dtype)
         if self.avg_var.data is None:
