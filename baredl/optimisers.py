@@ -2,6 +2,7 @@
 https://ruder.io/optimizing-gradient-descent/index.html
 """
 
+import math
 from abc import ABCMeta, abstractmethod
 from .core import get_array_module
 from .layers import Layer
