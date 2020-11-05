@@ -2,7 +2,7 @@ import os
 import weakref
 from abc import ABCMeta, abstractmethod
 import numpy as np
-from .core import Parameter, get_array_module
+from .core import Parameter, get_array_module, flatten, reshape
 import baredl.functions as F
 from .utils import pair
 from .config import Config
@@ -138,7 +138,7 @@ class Sequential(Layer):
 
 
 # -------------------------------------------------------------
-# Linear / Dropout
+# Linear / Dropout / Flatten
 # -------------------------------------------------------------
 
 
@@ -182,6 +182,21 @@ class Dropout(Layer):
         return y
 
 
+class Flatten(Layer):
+    def forward(self, x):
+        y = flatten(x)
+        return y
+
+
+class Reshape(Layer):
+    def __init__(self, shape):
+        self.shape = shape
+
+    def forward(self, x):
+        y = reshape(x, self.shape)
+        return y
+        
+
 # -------------------------------------------------------------
 # Activation
 # -------------------------------------------------------------
@@ -200,6 +215,12 @@ class LeakyReLU(Layer):
     def forward(self, x):
         y = F.leaky_relu(x, self.slope)
         return y
+
+
+class Sigmoid(Layer):
+    def forward(self, x):
+        y = F.sigmoid(x)
+        return x
 
 
 # -------------------------------------------------------------
@@ -280,7 +301,7 @@ class ConvTranspose2d(Layer):
 
 
 # -------------------------------------------------------------
-# MaxPool2d
+# Max Pooling
 # -------------------------------------------------------------
 
 
@@ -292,4 +313,40 @@ class MaxPool2d(Layer):
 
     def forward(self, x):
         y = F.max_pool2d(x, self.kernel_size, self.stride, self.pad)
+        return y
+
+
+# -------------------------------------------------------------
+# Batch Normalisation
+# -------------------------------------------------------------
+
+
+class BatchNorm2d(Layer):
+    def __init__(self):
+        super().__init__()
+        # `.avg_mean` and `.avg_var` are `Parameter` objects, so they will be
+        # saved to a file (using `save_weights()`).
+        # But they don't need grads, so they're just used as `ndarray`.
+        self.avg_mean = Parameter(None, name='avg_mean')
+        self.avg_var = Parameter(None, name='avg_var')
+        self.gamma = Parameter(None, name='gamma')
+        self.beta = Parameter(None, name='beta')
+
+    def _init_params(self, x):
+        xp = get_array_module(x)
+        D = x.shape[1]
+        if self.avg_mean.data is None:
+            self.avg_mean.data = xp.zeros(D, dtype=x.dtype)
+        if self.avg_var.data is None:
+            self.avg_var.data = xp.ones(D, dtype=x.dtype)
+        if self.gamma.data is None:
+            self.gamma.data = xp.ones(D, dtype=x.dtype)
+        if self.beta.data is None:
+            self.beta.data = xp.zeros(D, dtype=x.dtype)
+
+    def __call__(self, x):
+        if self.avg_mean.data is None:
+            self._init_params(x)
+
+        y = F.batch_norm(x, self.gamma, self.beta, self.avg_mean.data, self.avg_var.data)
         return y
