@@ -2,10 +2,11 @@ import os
 import weakref
 from abc import ABCMeta, abstractmethod
 import numpy as np
-from .core import Parameter, get_array_module, flatten, reshape
+from .core import Parameter, get_array_module, flatten, reshape, cupy
 import baredl.functions as F
 from .utils import pair
 from .config import Config
+from .cuda import is_available
 
 
 # -------------------------------------------------------------
@@ -154,7 +155,8 @@ class Linear(Layer):
         if self.in_features is not None:
             self._init_W()
         # init bias
-        self.b = None if not bias else Parameter(np.zeros(out_features, dtype=dtype), name='b')
+        xp = cupy if is_available() else np
+        self.b = None if not bias else Parameter(xp.zeros(out_features, dtype=dtype), name='b')
 
     def _init_W(self, xp=np):
         I, O = self.in_features, self.out_features
