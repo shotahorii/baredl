@@ -190,6 +190,7 @@ class Flatten(Layer):
 
 class Reshape(Layer):
     def __init__(self, shape):
+        super().__init__()
         self.shape = shape
 
     def forward(self, x):
@@ -210,6 +211,7 @@ class ReLU(Layer):
 
 class LeakyReLU(Layer):
     def __init__(self, slope=0.2):
+        super().__init__()
         self.slope = slope
 
     def forward(self, x):
@@ -307,6 +309,7 @@ class ConvTranspose2d(Layer):
 
 class MaxPool2d(Layer):
     def __init__(self, kernel_size, stride=1, padding=0):
+        super().__init__()
         self.kernel_size = kernel_size
         self.stride = stride
         self.pad = padding
