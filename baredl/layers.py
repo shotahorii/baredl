@@ -195,7 +195,7 @@ class Reshape(Layer):
     def forward(self, x):
         y = reshape(x, self.shape)
         return y
-        
+
 
 # -------------------------------------------------------------
 # Activation
@@ -344,7 +344,7 @@ class BatchNorm2d(Layer):
         if self.beta.data is None:
             self.beta.data = xp.zeros(D, dtype=x.dtype)
 
-    def __call__(self, x):
+    def forward(self, x):
         if self.avg_mean.data is None:
             self._init_params(x)
 
