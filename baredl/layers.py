@@ -224,7 +224,13 @@ class LeakyReLU(Layer):
 class Sigmoid(Layer):
     def forward(self, x):
         y = F.sigmoid(x)
-        return x
+        return y
+
+
+class Tanh(Layer):
+    def forward(self, x):
+        y = F.tanh(x)
+        return y
 
 
 # -------------------------------------------------------------
