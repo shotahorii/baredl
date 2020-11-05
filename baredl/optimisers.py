@@ -108,8 +108,8 @@ class Adagrad(Optimiser):
 
 
 class Adam(Optimiser):
-    def __init__(self, alpha=0.001, beta1=0.9, beta2=0.999, eps=1e-8):
-        super().__init__()
+    def __init__(self, params, alpha=0.001, beta1=0.9, beta2=0.999, eps=1e-8):
+        super().__init__(params)
         self.t = 0
         self.alpha = alpha
         self.beta1 = beta1
