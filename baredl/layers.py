@@ -43,6 +43,19 @@ class Layer(metaclass=ABCMeta):
             else:
                 yield obj
 
+    def children(self):
+        layers = []
+        for name in self._params:
+            obj = self.__dict__[name]
+            if isinstance(obj, Layer):
+                layers.append(obj)
+                sublayers = obj.children()
+                for sublayer in sublayers:
+                    layers.append(sublayer)
+        
+        return iter(layers)
+
+
     def train(self, mode=True):
         Config.training = mode
 
