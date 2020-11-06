@@ -154,7 +154,10 @@ class ToArray(TransformPIL):
 
     def _to_array(self, img):
         img = np.asarray(img)
-        img = img.transpose(2, 0, 1)
+        if img.ndim == 2: # gray scale
+            img = np.array([img]) # convert from (H,W) to (1,H,W)
+        else:
+            img = img.transpose(2, 0, 1) # convert from (H,W,C) to (C,H,W)
         img = img.astype(self.dtype)
         return img
 
@@ -172,10 +175,16 @@ class ToArray(TransformPIL):
 
 
 class ToPIL(TransformPIL):
-    """Convert NumPy array to PIL Image."""
+    """
+    Convert NumPy array to PIL Image.
+    https://stackoverflow.com/questions/51479140/convert-numpy-array-object-to-pil-image-object
+    """
 
     def _to_PIL(self, array):
-        data = array.transpose(1, 2, 0)
+        if array.shape[0] == 1: # gray scale
+          data = array[0] # convert to (H,W) shape
+        else: # RGB scale
+          data = array.transpose(1, 2, 0) # convert to (H,W,C) shape
         return Image.fromarray(data)
 
     def __call__(self, batch):
