@@ -132,6 +132,8 @@ class MNIST(Dataset):
         else: # digits is an int
             idx = np.where(self.label == digits)[0]
 
+        idx = idx.astype(int)
+
         self.data = self.data[idx]
         self.label = self.label[idx]
 
