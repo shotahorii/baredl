@@ -87,8 +87,11 @@ class MNIST(Dataset):
 
     def __init__(self, train=True,
                  transform=Compose([Flatten(), ToFloat(), Normalise(0., 255.)]),
-                 target_transform=None):
+                 target_transform=None, digits=None):
         super().__init__(train, transform, target_transform)
+
+        if digits is not None:
+            self._specify_digits(digits)
 
     def prepare(self):
         url = 'http://yann.lecun.com/exdb/mnist/'
@@ -114,6 +117,23 @@ class MNIST(Dataset):
             data = np.frombuffer(f.read(), np.uint8, offset=16)
         data = data.reshape(-1, 1, 28, 28)
         return data
+
+    def _specify_digits(self, digits):
+        """
+        Parameters
+        ----------
+        digits: int [0,9] or list of int [0,9]
+        """
+        if isinstance(digits, list) or isinstance(digits, np.ndarray):
+            digits = list(set(digits)) # remove duplicates if any
+            idx = np.array([])
+            for d in digits:
+                idx = np.concatenate([idx, np.where(self.label == d)[0]])
+        else: # digits is an int
+            idx = np.where(self.label == digits)[0]
+
+        self.data = self.data[idx]
+        self.label = self.label[idx]
 
     def show(self, row=10, col=10):
         if plt is None:

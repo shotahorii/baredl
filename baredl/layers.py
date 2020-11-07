@@ -387,3 +387,8 @@ class BatchNorm2d(Layer):
 
         y = F.batch_norm(x, self.gamma, self.beta, self.avg_mean.data, self.avg_var.data)
         return y
+
+
+class BatchNorm1d(BatchNorm2d):
+    """ Above implementation works for 1d i.e. x is (N,L) shape """
+    pass
