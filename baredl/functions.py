@@ -1,5 +1,5 @@
 import numpy as np
-from .core import Tensor, Function, reverse_broadcast_to, get_array_module, sum, clip
+from .core import Tensor, Function, reverse_broadcast_to, get_array_module, sum, clip, repeat_interleave
 from .utils import logsumexp, pair, im2col_array, col2im_array, get_deconv_outsize
 from .config import Config
 
@@ -844,3 +844,36 @@ class BatchNorm(Function):
 
 def batch_norm(x, gamma, beta, mean, var, decay=0.9, eps=2e-5):
     return BatchNorm(mean, var, decay, eps)(x, gamma, beta)
+
+
+# -------------------------------------------------------------
+# Upsample
+# -------------------------------------------------------------  
+
+
+def upsample(x, scale_factor, mode='nearest'):
+    """
+    x: baredl.Tensor (N, C, W) or (N, C, H, W)
+
+    scale_factor: int or tuple of ints
+        if x is (N, C, W), scale_factor needs to be int or (int,)
+        if x is (N, C, H, W), scale_factor can be int, (int,) or (int, int) 
+    """
+    if x.ndim != 3 and x.ndim != 4:
+        raise ValueError('input needs to be 3d or 4d tensor.')
+
+    if mode != 'nearest':
+        raise ValueError('Currently only supporting mode="nearest"')
+
+    # standardise the input scale_factor format
+    if isinstance(scale_factor, tuple) and len(scale_factor)==1:
+        scale_factor = scale_factor[0]
+    scale_dim2, scale_dim3 = pair(scale_factor) 
+
+    y = x.repeat_interleave(repeats=scale_dim2, dim=2)
+    if x.ndim == 4:
+        y = y.repeat_interleave(repeats=scale_dim3, dim=3)
+
+    return y
+        
+

@@ -394,3 +394,19 @@ class BatchNorm2d(Layer):
 class BatchNorm1d(BatchNorm2d):
     """ Above implementation works for 1d i.e. x is (N,C) shape """
     pass
+
+
+# -------------------------------------------------------------
+# Upsample
+# -------------------------------------------------------------
+
+
+class Upsample(Layer):
+    def __init__(self, scale_factor, mode='nearest'):
+        super().__init__()
+        self.scale_factor = scale_factor
+        self.mode = mode
+
+    def forward(self, x):
+        y = F.upsample(x, self.scale_factor, self.mode)
+        return y

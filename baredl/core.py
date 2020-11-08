@@ -1019,7 +1019,7 @@ def clip(x, x_min, x_max):
 # -------------------------------------------------------------
 
 
-# !!! need test !!!
+# !!! need unit test !!!
 class RepeatInterleave(Function):
     def __init__(self, repeats=2, dim=None):
         self.repeats = repeats
