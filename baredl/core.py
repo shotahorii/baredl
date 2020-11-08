@@ -213,6 +213,9 @@ class Tensor:
             shape = shape[0]
         return reshape(self, shape)
 
+    def repeat_interleave(self, repeats=2, dim=None):
+        return repeat_interleave(self, repeats, dim)
+
     def set_creator(self, func):
         self.creator = func
         # generation of this Tensor instance will be 1 step deeper 
@@ -1009,3 +1012,34 @@ class Clip(Function):
 
 def clip(x, x_min, x_max):
     return Clip(x_min, x_max)(x)
+
+
+# -------------------------------------------------------------
+# repeat_interleave
+# -------------------------------------------------------------
+
+
+# !!! need test !!!
+class RepeatInterleave(Function):
+    def __init__(self, repeats=2, dim=None):
+        self.repeats = repeats
+        self.dim = dim
+
+    def forward(self, x):
+        self.x_shape = x.shape
+        xp = get_array_module(x)
+        y = xp.repeat(x, self.repeats, self.dim)
+        return y
+
+    def backward(self, gy):
+        if self.dim is None:
+            gx = gy.reshape(-1, self.repeats).sum(axis=1).reshape(self.x_shape)
+        else:
+            new_shape = list(self.x_shape)
+            new_shape.insert(self.dim+1,self.repeats)
+            gx = gy.reshape(*new_shape).sum(axis=self.dim+1)
+        return gx
+
+
+def repeat_interleave(x, repeats=2, dim=None):
+    return RepeatInterleave(repeats, dim)(x)
