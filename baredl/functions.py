@@ -298,8 +298,9 @@ def binary_cross_entropy_with_logits(p, t):
     if p.ndim != t.ndim:
         t = t.reshape(*p.shape)
     N = len(t)
+    p = sigmoid(p)
     p = clip(p, 1e-15, 0.999)
-    tlog_p = t * log(sigmoid(p)) + (1 - t) * log(1 - sigmoid(p))
+    tlog_p = t * log(p) + (1 - t) * log(1 - p)
     y = -1 * sum(tlog_p) / N
     return y
 
@@ -769,7 +770,11 @@ class MaxPool2dWithIndices(Function):
 # -------------------------------------------------------------   
 
 
-class BatchNorm2d(Function):
+class BatchNorm(Function):
+    """
+    https://leimao.github.io/blog/Batch-Normalization/
+    https://mlexplained.com/2018/11/30/an-overview-of-normalization-methods-in-deep-learning/
+    """
     def __init__(self, mean, var, decay, eps):
         self.avg_mean = mean
         self.avg_var = var
@@ -838,4 +843,4 @@ class BatchNorm2d(Function):
 
 
 def batch_norm(x, gamma, beta, mean, var, decay=0.9, eps=2e-5):
-    return BatchNorm2d(mean, var, decay, eps)(x, gamma, beta)
+    return BatchNorm(mean, var, decay, eps)(x, gamma, beta)

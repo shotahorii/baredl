@@ -2,9 +2,6 @@
 Helper functions.
 """
 
-import os
-import gzip
-import urllib.request
 import numpy as np
 from .core import Tensor, get_array_module, cupy
 
@@ -421,63 +418,3 @@ def _col2im_gpu(col, sy, sx, ph, pw, h, w):
                   h, w, out_h, out_w, kh, kw, sy, sx, ph, pw, dx, dy, img)
     return img
 
-
-# -------------------------------------------------------------
-# Helper functions for data: get_file
-# -------------------------------------------------------------
-
-
-# path to the directory to put any cache files.
-CACHE_DIR = os.path.join(os.path.expanduser('~'), '.baredl')
-
-
-def show_progress(block_num, block_size, total_size):
-    bar_template = "\r[{}] {:.2f}%"
-
-    downloaded = block_num * block_size
-    p = downloaded / total_size * 100
-    i = int(downloaded / total_size * 30)
-    if p >= 100.0: p = 100.0
-    if i >= 30: i = 30
-    bar = "#" * i + "." * (30 - i)
-    print(bar_template.format(bar, p), end='')
-
-
-def get_file(url, file_name=None):
-    """
-    Download a file from the given url if it is not in the cache.
-    The file at the given url is downloaded to the '~/.baredl'.
-
-    Parameters
-    ----------
-    url: str
-        url of the file.
-    
-    file_name: str
-        name of the file. If none, the original file name is used.
-
-    Returns
-    -------
-    file_path: str
-        Absolute path to the saved file.
-    """
-    if file_name is None:
-        file_name = url[url.rfind('/') + 1:]
-    file_path = os.path.join(CACHE_DIR, file_name)
-
-    if not os.path.exists(CACHE_DIR):
-        os.mkdir(CACHE_DIR)
-
-    if os.path.exists(file_path):
-        return file_path
-
-    print("Downloading: " + file_name)
-    try:
-        urllib.request.urlretrieve(url, file_path, show_progress)
-    except (Exception, KeyboardInterrupt) as e:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        raise
-    print(" Done")
-
-    return file_path

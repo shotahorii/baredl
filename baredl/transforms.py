@@ -10,6 +10,11 @@ except ImportError:
     Image = None
 
 
+# -------------------------------------------------------------
+# Compose & Base classes
+# -------------------------------------------------------------
+
+
 class Compose:
     """ 
     Compose multiple transforms 
@@ -150,6 +155,7 @@ class Normalise(Transform):
 class ToArray(TransformPIL):
     """Convert PIL Image to NumPy array."""
     def __init__(self, dtype=np.float32):
+        super().__init__()
         self.dtype = dtype
 
     def _to_array(self, img):
@@ -205,6 +211,7 @@ class Resize(TransformPIL):
         mode (int): Desired interpolation.
     """
     def __init__(self, size, mode=Image.BILINEAR):
+        super().__init__()
         self.size = pair(size)
         self.mode = mode
 

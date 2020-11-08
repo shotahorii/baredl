@@ -1,15 +1,82 @@
 from abc import ABCMeta, abstractmethod
+import os
 import gzip
+import urllib.request
 import math
 import numpy as np
-from .utils import get_file
 from .transforms import Compose, Flatten, ToFloat, Normalise
 
-# matplotlib is not in dependency list
+# matplotlib is not in dependency list (optional)
 try:
     import matplotlib.pyplot as plt
 except ImportError:
     plt = None
+
+
+# -------------------------------------------------------------
+# Helper functions
+# -------------------------------------------------------------
+
+
+# path to the directory to put any cache files.
+CACHE_DIR = os.path.join(os.path.expanduser('~'), '.baredl')
+
+
+def show_progress(block_num, block_size, total_size):
+    bar_template = "\r[{}] {:.2f}%"
+
+    downloaded = block_num * block_size
+    p = downloaded / total_size * 100
+    i = int(downloaded / total_size * 30)
+    if p >= 100.0: p = 100.0
+    if i >= 30: i = 30
+    bar = "#" * i + "." * (30 - i)
+    print(bar_template.format(bar, p), end='')
+
+
+def get_file(url, file_name=None):
+    """
+    Download a file from the given url if it is not in the cache.
+    The file at the given url is downloaded to the '~/.baredl'.
+
+    Parameters
+    ----------
+    url: str
+        url of the file.
+    
+    file_name: str
+        name of the file. If none, the original file name is used.
+
+    Returns
+    -------
+    file_path: str
+        Absolute path to the saved file.
+    """
+    if file_name is None:
+        file_name = url[url.rfind('/') + 1:]
+    file_path = os.path.join(CACHE_DIR, file_name)
+
+    if not os.path.exists(CACHE_DIR):
+        os.mkdir(CACHE_DIR)
+
+    if os.path.exists(file_path):
+        return file_path
+
+    print("Downloading: " + file_name)
+    try:
+        urllib.request.urlretrieve(url, file_path, show_progress)
+    except (Exception, KeyboardInterrupt) as e:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise
+    print(" Done")
+
+    return file_path
+
+
+# -------------------------------------------------------------
+# Core classes: Dataset / DataLoader
+# -------------------------------------------------------------
 
 
 class Dataset(metaclass=ABCMeta):
@@ -25,21 +92,21 @@ class Dataset(metaclass=ABCMeta):
             self.target_transform = lambda x:x
 
         self.data = None
-        self.label = None
+        self.target = None
         self.prepare()
 
     def __getitem__(self, index):
-        if self.label is None:
+        if self.target is None:
             return self.transform(self.data[index]), None
         else:
-            return self.transform(self.data[index]), self.target_transform(self.label[index])
+            return self.transform(self.data[index]), self.target_transform(self.target[index])
 
     def __len__(self):
         return len(self.data)
 
     @abstractmethod
     def prepare(self):
-        """ implement data creation for self.data and self.label """
+        """ implement data creation for self.data and self.target """
         pass
 
 
@@ -83,6 +150,7 @@ class DataLoader:
 # Datasets: MNIST
 # -------------------------------------------------------------
 
+
 class MNIST(Dataset):
 
     def __init__(self, train=True,
@@ -105,7 +173,7 @@ class MNIST(Dataset):
         label_path = get_file(url + files['label'])
 
         self.data = self._load_data(data_path)
-        self.label = self._load_label(label_path)
+        self.target = self._load_label(label_path)
 
     def _load_label(self, filepath):
         with gzip.open(filepath, 'rb') as f:
@@ -128,14 +196,14 @@ class MNIST(Dataset):
             digits = list(set(digits)) # remove duplicates if any
             idx = np.array([])
             for d in digits:
-                idx = np.concatenate([idx, np.where(self.label == d)[0]])
+                idx = np.concatenate([idx, np.where(self.target == d)[0]])
         else: # digits is an int
-            idx = np.where(self.label == digits)[0]
+            idx = np.where(self.target == digits)[0]
 
         idx = idx.astype(int)
 
         self.data = self.data[idx]
-        self.label = self.label[idx]
+        self.target = self.target[idx]
 
     def show(self, row=10, col=10):
         if plt is None:
@@ -154,3 +222,4 @@ class MNIST(Dataset):
     @staticmethod
     def labels():
         return {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9'}
+
